@@ -1,5 +1,12 @@
-#ifndef CECS_SPARSESET_HPP_
-#define CECS_SPARSESET_HPP_
+/*****************************************************************//**
+ * @file   SparseSet.hpp
+ * @brief  SparseSetクラスのヘッダファイル
+ * 
+ * @author ichi-raven
+ * @date   November 2022
+ *********************************************************************/
+#ifndef EC2S_SPARSESET_HPP_
+#define EC2S_SPARSESET_HPP_
 
 #include "ISparseSet.hpp"
 

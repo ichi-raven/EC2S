@@ -1,8 +1,18 @@
-#ifndef CECS_ISPARSESET_HPP_
-#define CECS_ISPARSESET_HPP_
+/*****************************************************************//**
+ * @file   ISparseSet.hpp
+ * @brief  ISparseSetクラスのヘッダファイル
+ * 
+ * @author ichi-raven
+ * @date   November 2022
+ *********************************************************************/
+#ifndef EC2S_ISPARSESET_HPP_
+#define EC2S_ISPARSESET_HPP_
 
 #include <vector>
+
+#ifndef NDEBUG
 #include <iostream>
+#endif
 
 #include "TypeHash.hpp"
 
@@ -61,6 +71,7 @@ namespace ec2s
 
         void dump()
         {
+#ifndef NDEBUG
             std::cerr << "index dump (for debug) : \n";
             std::cerr << "sparse : \n";
             for (int i = 0; auto & e : mSparseIndices)
@@ -73,6 +84,7 @@ namespace ec2s
             {
                 std::cerr << i++ << " : " << e << "\n";
             }
+#endif
         }
 
         constexpr virtual TypeHash getPackedTypeHash() const = 0;

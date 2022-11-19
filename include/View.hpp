@@ -1,3 +1,12 @@
+/*****************************************************************//**
+ * @file   View.hpp
+ * @brief  Viewクラスのヘッダファイル
+ * 
+ * @author ichi-raven
+ * @date   November 2022
+ *********************************************************************/
+#ifndef EC2S_VIEW_HPP_
+#define EC2S_VIEW_HPP_
 
 #include <tuple>
 
@@ -73,3 +82,5 @@ namespace ec2s
         std::tuple<SparseSet<Args>&...> mSparseSets;
     };
 }
+
+#endif

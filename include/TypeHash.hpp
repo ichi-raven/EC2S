@@ -1,18 +1,12 @@
-//#define COMPONENT_DATA(T)                                            \
-//public:                                                              \
-//    static constexpr std::uint32_t getTypeHash()                     \
-//    {                                                                \
-//        std::string_view typeStr = #T;                               \
-//        return fnv1a_32(#T, typeStr.size());                         \
-//    }
-//
-//constexpr std::uint32_t fnv1a_32(char const* s, std::size_t count)
-//{
-//    return ((count ? fnv1a_32(s, count - 1) : 2166136261u) ^ s[count]) * 16777619u;
-//}
-
-#ifndef CECS_TYPEHASH_HPP_
-#define CECS_TYPEHASH_HPP_
+/*****************************************************************//**
+ * @file   TypeHash.hpp
+ * @brief  TypeHashGeneratorクラス及び環境依存マクロのヘッダファイル
+ * 
+ * @author ichi-raven
+ * @date   November 2022
+ *********************************************************************/
+#ifndef EC2S_TYPEHASH_HPP_
+#define EC2S_TYPEHASH_HPP_
 
 #if defined _WIN32 || defined __CYGWIN__ || defined _MSC_VER
 #    define GENERATOR_EXPORT __declspec(dllexport)
@@ -43,6 +37,7 @@
 #endif
 
 #include <cstdint>
+#include <string_view>
 
 namespace ec2s
 {
@@ -72,6 +67,7 @@ namespace ec2s
 #endif
 
     private:
+
         struct GENERATOR_API generator
         {
             static std::size_t next() 

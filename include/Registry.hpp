@@ -8,6 +8,10 @@
 #include <queue>
 #include <cassert>
 
+#ifndef NDEBUG
+#include <iostream>
+#endif
+
 namespace ec2s
 {
     class Registry
@@ -100,12 +104,14 @@ namespace ec2s
 
         void dump()
         {
+#ifndef NDEBUG
             for (const auto& pSS : mpComponentArrays)
             {
                 std::cerr << "type hash : " << pSS->getPackedTypeHash() << "\n";
                 pSS->dump();
                 std::cerr << "\n";
             }
+#endif
         }
 
     private:
