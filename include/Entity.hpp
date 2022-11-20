@@ -7,6 +7,7 @@
  *********************************************************************/
 #ifndef EC2S_ENTITY_HPP_
 #define EC2S_ENTITY_HPP_
+
 #include <cstdint>
 
 namespace ec2s

@@ -14,12 +14,12 @@
 
 namespace ec2s
 {
-    template<typename... Args>
+    template<typename ComponentType, typename... OtherComponentTypes>
     class View
     {
     public:
-        View(SparseSet<Args>&... sets)
-            : mSparseSets(sets...)
+        View(SparseSet<ComponentType>& head, SparseSet<OtherComponentTypes>&... tails)
+            : mSparseSets(head, tails...)
         {
 
         }
@@ -28,58 +28,70 @@ namespace ec2s
         void each(Func f)
         {
             // 最もサイズの小さいSparseSetのDenseIndicesをイテレート
-            execEachByMinSizeSparseSet<Func, Args...>(searchMinSizeSparseSet<Args...>(std::numeric_limits<std::size_t>::max()), f);
+            execEachByMinSizeSparseSet<Func, 0, ComponentType, OtherComponentTypes...>(f, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
         }
 
-        /*template<typename T, typename Func>
+        template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func>
         void each(Func f)
         {
-            std::get<SparseSet<T>&>(mSparseSets).each(f);
-        }*/
-
-        template<typename T1, typename Func, typename... Tail>
-        void each(Func f)
-        {
-            execEachByMinSizeSparseSet<Func, T1, Tail...>(searchMinSizeSparseSet<T1, Tail...>(std::numeric_limits<std::size_t>::max()), f);
+            if constexpr (sizeof...(OtherTargetComponentTypes) == 0)
+            {
+                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(f, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
+            }
+            else
+            {
+                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(f, searchMinSizeSparseSet<OtherTargetComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
+            }
         }
 
     private:
 
-        template<typename Head, typename... Tail>
-        std::size_t searchMinSizeSparseSet(const std::size_t nowMin)
+        template<size_t dummy = 0>
+        TypeHash searchMinSizeSparseSet(const std::size_t nowMin, const TypeHash hash)
         {
-            auto&& size = std::get<SparseSet<Head>&>(mSparseSets).size();
+            return hash;
+        }
+
+        template<typename Head, typename... Tail>
+        TypeHash searchMinSizeSparseSet(const std::size_t nowMin, const TypeHash hash)
+        {
+            auto size = std::get<SparseSet<Head>&>(mSparseSets).size();
 
             if constexpr (sizeof...(Tail) > 0)
             {
-                return searchMinSizeSparseSet<Tail...>((nowMin <= size ? nowMin : size));
+                if (nowMin <= size)
+                {
+                    return searchMinSizeSparseSet<Tail...>(nowMin, hash);
+                }
+                else
+                {
+                    return searchMinSizeSparseSet<Tail...>(size, TypeHashGenerator::id<Head>());
+                }
             }
 
-            return (nowMin <= size ? nowMin : size);
+            return (nowMin <= size ? hash : TypeHashGenerator::id<Head>());
         }
 
-        template<typename Func, typename Head, typename... Tail>
-        void execEachByMinSizeSparseSet(std::size_t minSize, Func f)
+        template<typename Func, size_t SSIndex, typename... ComponentTypes>
+        void execEachByMinSizeSparseSet(Func f, TypeHash hash)
         {
-            auto& sparseSet = std::get<SparseSet<Head>&>(mSparseSets);
-
-            if (minSize == sparseSet.size())
+            if constexpr (SSIndex < sizeof...(OtherComponentTypes) + 1)
             {
-                for (const auto& entity : sparseSet.getDenseIndices())
+                if (auto& sparseSet = std::get<SSIndex>(mSparseSets); hash == sparseSet.getPackedTypeHash())
                 {
-                    f(std::get<SparseSet<Args>&>(mSparseSets)[entity]...);
+                    for (const auto entity : sparseSet.getDenseIndices())
+                    {
+                        f(std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
+                    }
                 }
-            }
-            else
-            {
-                if constexpr (sizeof...(Tail) > 0)
+                else
                 {
-                    execEachByMinSizeSparseSet<Func, Tail...>(minSize, f);
+                    execEachByMinSizeSparseSet<Func, SSIndex + 1, ComponentTypes...>(f, hash);
                 }
             }
         }
 
-        std::tuple<SparseSet<Args>&...> mSparseSets;
+        std::tuple<SparseSet<ComponentType>&, SparseSet<OtherComponentTypes>&...> mSparseSets;
     };
 }
 

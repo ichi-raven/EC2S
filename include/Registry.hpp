@@ -1,3 +1,5 @@
+#ifndef EC2S_REGISTRY_HPP_
+#define EC2S_REGISTRY_HPP_
 
 #include "SparseSet.hpp"
 #include "View.hpp"
@@ -61,16 +63,16 @@ namespace ec2s
         template<typename T>
         T& get(Entity entity)
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator<T>::id()])[static_cast<std::size_t>(entity & kEntityIndexMask)];
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()])[static_cast<std::size_t>(entity & kEntityIndexMask)];
         }
 
         template<typename T, typename... Args>
         void add(Entity entity, Args... args)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator<T>::id());
+            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
             if (itr == mComponentArrayMap.end())
             {
-                itr = mComponentArrayMap.emplace(TypeHashGenerator<T>::id(), SparseSet<T>()).first;
+                itr = mComponentArrayMap.emplace(TypeHashGenerator::id<T>(), SparseSet<T>()).first;
                 mpComponentArrays.emplace_back(std::any_cast<SparseSet<T>>(&itr->second));
             }
 
@@ -81,7 +83,7 @@ namespace ec2s
         template<typename T>
         void remove(Entity entity)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator<T>::id());
+            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.remove(static_cast<std::size_t>(entity & kEntityIndexMask));
@@ -90,7 +92,7 @@ namespace ec2s
         template<typename T, typename Func>
         void each(Func func)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator<T>::id());
+            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.each(func);
@@ -99,7 +101,8 @@ namespace ec2s
         template<typename... Args>
         View<Args...> view()
         {
-            return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHashGenerator<Args>::id()])...);
+            assert(hasAllTypesCalled<Args...>() || !"component type which requested by view is not contained in this registry!");
+            return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHashGenerator::id<Args>()])...);
         }
 
         void dump()
@@ -126,6 +129,23 @@ namespace ec2s
             }
         }
 
+        template<typename Head, typename... Tail>
+        bool hasAllTypesCalled()
+        {
+            if (!mComponentArrayMap.contains(TypeHashGenerator::id<Head>()))
+            {
+                return false;
+            }
+
+            if constexpr (sizeof...(Tail) > 0)
+            {
+                hasAllTypesCalled<Tail...>();
+            }
+
+            return true;
+        }
+
+
         Entity mNextEntity;
         std::queue<Entity> mFreedEntities;
 
@@ -133,3 +153,5 @@ namespace ec2s
         std::vector<ISparseSet*> mpComponentArrays;
     };
 }
+
+#endif

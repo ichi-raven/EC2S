@@ -74,7 +74,7 @@ namespace ec2s
 
         constexpr virtual TypeHash getPackedTypeHash() const
         {
-            return TypeHashGenerator<T>::id();
+            return TypeHashGenerator::id<T>();
         }
 
     private:
