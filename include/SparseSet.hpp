@@ -11,6 +11,7 @@
 #include "ISparseSet.hpp"
 
 #include <cassert>
+#include <optional>
 
 namespace ec2s
 {
@@ -26,41 +27,76 @@ namespace ec2s
         {}
 
         template<typename... Args>
-        void emplace(std::size_t index, Args... args)
+        void emplace(Entity entity, Args... args)
         {
-            if (index >= mSparseIndices.size())
+            auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+
+            if (index >= mSparseEntities.size())
             {
                 resizeSparseIndex(index + 1);
             }
 
-            mSparseIndices[index] = mPacked.size();
-            mDenseIndices.emplace_back(index);
+            mSparseEntities[index] = (entity & kEntitySlotMask) | static_cast<Entity>(mPacked.size());
+            mDenseEntities.emplace_back(entity);
             mPacked.emplace_back(args...);
         }
 
-        virtual void removePackedElement(std::size_t index) override
+        virtual void removePackedElement(std::size_t sparseIndex) override
         {
-            std::swap(mPacked[mSparseIndices[index]], mPacked.back());
+            std::swap(mPacked[sparseIndex], mPacked.back());
             mPacked.pop_back();
         }
 
         void clear()
         {
-            mSparseIndices.clear();
-            mDenseIndices.clear();
+            mSparseEntities.clear();
+            mDenseEntities.clear();
             mPacked.clear();
         }
 
         void reserve(const std::size_t reserveSize)
         {
+            mSparseEntities.reserve(reserveSize);
             mPacked.reserve(reserveSize);
-            mDenseIndices.reserve(reserveSize);
+            mDenseEntities.reserve(reserveSize);
         }
 
-        T& operator[](const std::size_t index)
+        T& operator[](const Entity entity)
         {
-            assert(mSparseIndices[index] < mPacked.size());
-            return mPacked[mSparseIndices[index]];
+            auto index = static_cast<size_t>(entity & kEntityIndexMask);
+            auto sparseEntity = mSparseEntities[index];
+            auto sparseIndex = static_cast<std::size_t>(sparseEntity & kEntityIndexMask);
+
+            assert(sparseIndex < mPacked.size() || !"accessed by invalid entity!");
+
+            //if ((entity & kEntitySlotMask) != (sparseEntity & kEntitySlotMask))
+            //{
+            //    std::cerr << "debug entity : " << entity << "\n";
+            //    std::cerr << ((entity & kEntitySlotMask) >> kEntitySlotShiftWidth) << " : " << ((sparseEntity & kEntitySlotMask) >> kEntitySlotShiftWidth) << "\n";
+            //}
+
+            assert((entity & kEntitySlotMask) == (sparseEntity & kEntitySlotMask) || !"accessed by invalid(deleted) entity!");
+
+            return mPacked[sparseIndex];
+        }
+
+        std::optional<std::size_t> getSparseIndexIfValid(const Entity entity)
+        {
+            auto index = static_cast<size_t>(entity & kEntityIndexMask);
+            auto sparseEntity = mSparseEntities[index];
+            auto sparseIndex = static_cast<std::size_t>(sparseEntity & kEntityIndexMask);
+
+            if (sparseIndex < mPacked.size() && (entity & kEntitySlotMask) == (sparseEntity & kEntitySlotMask))
+            {
+                return std::make_optional<std::size_t>(sparseIndex);
+            }
+
+            return std::nullopt;
+        }
+
+        inline T& getBySparseIndex(const std::size_t sparseIndex)
+        {
+            return mPacked[sparseIndex];
         }
 
         template<typename Func>

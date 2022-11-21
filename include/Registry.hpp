@@ -38,7 +38,7 @@ namespace ec2s
             }
             else
             {
-                rtn = mFreedEntities.front() & kEntityIndexMask;
+                rtn = mFreedEntities.front();
                 mFreedEntities.pop();
             }
 
@@ -52,28 +52,50 @@ namespace ec2s
 
         void destroy(Entity entity)
         {
-            for (auto& pSparseSet : mpComponentArrays)
+            for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
             {
-                pSparseSet->remove(static_cast<std::size_t>(entity & kEntityIndexMask));
+                pSparseSet->remove(entity);
+
+                //if (pSparseSet->size() == 0)
+                //{
+                //    mComponentArrayMap.erase(typeHash);
+                //}
             }
 
-            mFreedEntities.emplace((entity & kEntityIndexMask) + (1ull << kEntitySlotShiftWidth));
+            mFreedEntities.emplace(entity + (1ull << kEntitySlotShiftWidth));
         }
 
         template<typename T>
         T& get(Entity entity)
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()])[static_cast<std::size_t>(entity & kEntityIndexMask)];
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()])[entity];
+        }
+
+        std::size_t activeEntityNum() const
+        {
+            return mNextEntity - mFreedEntities.size();
+        }
+
+        template<typename T>
+        std::size_t size()
+        {
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()]).size();
         }
 
         template<typename T, typename... Args>
         void add(Entity entity, Args... args)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
+#ifndef NDEBUG
+            const TypeHash hash = TypeHashGenerator::id<T>();
+#else
+            constexpr TypeHash hash = TypeHashGenerator::id<T>();
+#endif
+
+            auto&& itr = mComponentArrayMap.find(hash);
             if (itr == mComponentArrayMap.end())
             {
-                itr = mComponentArrayMap.emplace(TypeHashGenerator::id<T>(), SparseSet<T>()).first;
-                mpComponentArrays.emplace_back(std::any_cast<SparseSet<T>>(&itr->second));
+                itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
+                mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<T>>(&itr->second));
             }
 
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
@@ -86,7 +108,7 @@ namespace ec2s
             auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
-            ss.remove(static_cast<std::size_t>(entity & kEntityIndexMask));
+            ss.remove(entity);
         }
 
         template<typename T, typename Func>
@@ -108,10 +130,10 @@ namespace ec2s
         void dump()
         {
 #ifndef NDEBUG
-            for (const auto& pSS : mpComponentArrays)
+            for (const auto& pSS : mpComponentArrayPairs)
             {
-                std::cerr << "type hash : " << pSS->getPackedTypeHash() << "\n";
-                pSS->dump();
+                std::cerr << "type hash : " << pSS.first << "\n";
+                pSS.second->dump();
                 std::cerr << "\n";
             }
 #endif
@@ -150,7 +172,7 @@ namespace ec2s
         std::queue<Entity> mFreedEntities;
 
         std::unordered_map<TypeHash, std::any> mComponentArrayMap;
-        std::vector<ISparseSet*> mpComponentArrays;
+        std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };
 }
 

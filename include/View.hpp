@@ -79,9 +79,13 @@ namespace ec2s
             {
                 if (auto& sparseSet = std::get<SSIndex>(mSparseSets); hash == sparseSet.getPackedTypeHash())
                 {
-                    for (const auto entity : sparseSet.getDenseIndices())
+                    auto& entities = sparseSet.getDenseEntities();
+                    for (const auto& entity : entities)
                     {
-                        f(std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
+                        if (auto opIndex = sparseSet.getSparseIndexIfValid(entity))
+                        {
+                            f(std::get<SparseSet<ComponentTypes>&>(mSparseSets).getBySparseIndex(*opIndex)...);
+                        }
                     }
                 }
                 else

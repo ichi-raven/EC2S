@@ -1,6 +1,7 @@
 #include "include/EC2S.hpp"
 
 #include <chrono>
+#include <iostream>
 
 struct A
 {
@@ -49,7 +50,7 @@ struct C
 
 void test()
 {
-    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e1);
 
     std::chrono::high_resolution_clock::time_point start, end;
     double elapsed = 0;
@@ -64,6 +65,14 @@ void test()
     {
         std::cout << "create and emplace : \n";
         start = std::chrono::high_resolution_clock::now();
+
+        // composition of component(進次郎)
+        // Entity 0 : A, C
+        // Entity 1 : A, B
+        // Entity 2 : A, C
+        // Entity 3 : A, B
+        // ...
+
         for (std::size_t i = 0; i < kTestEntityNum; ++i)
         {
             entities[i] = registry.create();
@@ -79,16 +88,18 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n\n";
     }
 
-    // composition of component(進次郎)
-    // Entity 0 : A, C
-    // Entity 1 : A, B
-    // Entity 2 : A, C
-    // Entity 3 : A, B
-    // ...
+    std::cout << "\nnow entity num : " << registry.activeEntityNum() << "\n";
+    std::cout << "all component num : \n";
+    {
+        std::cout << "component A : " << registry.size<A>() << "\n";
+        std::cout << "component B : " << registry.size<B>() << "\n";
+        std::cout << "component C : " << registry.size<C>() << "\n";
+    }
+    std::cout << "\n";
 
     {
         std::cout << "each single component : \n";
@@ -99,7 +110,7 @@ void test()
         registry.each<C>([](C& e) {e.c += 1; });
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -121,7 +132,7 @@ void test()
     }
 
     {
-        std::cout << "get Component A from all entities : \n";
+        std::cout << "get component A from all entities : \n";
         start = std::chrono::high_resolution_clock::now();
 
         for (auto&& entity : entities)
@@ -130,7 +141,7 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -158,7 +169,7 @@ void test()
         view.each([](A& e1, C& e2) {e1.a += static_cast<int>(e2.c); });
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -167,7 +178,7 @@ void test()
         bool succeeded = true;
         auto view = registry.view<A, C>();
 
-        //view.each<A>([&](A e){if (e.a != 1 + static_cast<int>('b')){std::cerr << e.a << "\n"; succeeded = false; }});
+        view.each<A>([&](A e){if (e.a != 1 + static_cast<int>('b')){std::cerr << e.a << "\n"; succeeded = false; }});
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -187,7 +198,7 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -213,7 +224,7 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
         std::cout << "time : " << elapsed << "[ms]\n\n";
     }
 
@@ -229,14 +240,17 @@ void test()
         start = std::chrono::high_resolution_clock::now();
 
         //std::cout << "Component A each : \n";
-        registry.each<A>([](A& e) {e.a += 1; });
+        registry.each<A>([&](A& e) 
+            {
+                e.a += 1;
+            });
         //std::cout << "Component B each : \n";
         registry.each<B>([](B& e) {e.b += 2.; });
         //std::cout << "Component C each : \n";
         registry.each<C>([](C& e) {e.c += 1; });
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -258,7 +272,7 @@ void test()
     }
 
     {
-        std::cout << "get Component A from all entities : \n";
+        std::cout << "get component A from all entities : \n";
         start = std::chrono::high_resolution_clock::now();
 
         for (auto&& entity : entities)
@@ -267,7 +281,7 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -295,7 +309,7 @@ void test()
         view.each([](A& e1, C& e2) {e1.a += static_cast<int>(e2.c); });
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -304,7 +318,17 @@ void test()
         bool succeeded = true;
         auto view = registry.view<A, C>();
 
-        view.each<A>([&](A e) {if (e.a != 1 + static_cast<int>('b')) { std::cerr << e.a << "\n"; succeeded = false; }});
+        view.each<A>([&](A e) 
+            {
+                if (e.a != 1 + static_cast<int>('b')) 
+                {
+                    std::cerr << e.a << "\n"; 
+                    succeeded = false; 
+                }
+
+                registry.destroy(entities.back());
+                entities.pop_back();
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -324,7 +348,7 @@ void test()
         }
 
         end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); //処理に要した時間をミリ秒に変換
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 

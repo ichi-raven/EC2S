@@ -15,6 +15,7 @@
 #endif
 
 #include "TypeHash.hpp"
+#include "Entity.hpp"
 
 namespace ec2s
 {
@@ -22,7 +23,7 @@ namespace ec2s
     {
     public:
 
-        constexpr static std::size_t kTombstone = std::numeric_limits<std::size_t>::max();
+        constexpr static std::size_t kTombstone = std::numeric_limits<std::uint32_t>::max();
 
         ISparseSet()
         {}
@@ -30,43 +31,47 @@ namespace ec2s
         virtual ~ISparseSet()
         {}
 
-        void remove(const std::size_t index)
+        void remove(const Entity entity)
         {
-            if (index >= mSparseIndices.size())
+            auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+
+            if (index >= mSparseEntities.size())
             {
                 return;
             }
 
-            const auto sparseIndex = mSparseIndices[index];
-            //std::cerr << "removed index : " << sparseIndex << "\n";
-            if (sparseIndex == kTombstone)
+            const Entity sparseEntity = mSparseEntities[index];
+            const std::size_t sparseIndex = static_cast<std::size_t>(sparseEntity & kEntityIndexMask);
+            if (sparseIndex == kTombstone || (sparseEntity & kEntitySlotMask) != (entity & kEntitySlotMask))
             {
                 return;
             }
 
-            std::swap(mDenseIndices[sparseIndex], mDenseIndices.back());
-            mSparseIndices[mDenseIndices[sparseIndex]] = sparseIndex;
+            const Entity newSlot = ((((sparseEntity & kEntitySlotMask) >> kEntitySlotShiftWidth) + 1) << kEntitySlotShiftWidth);
 
-            mDenseIndices.pop_back();
+            std::swap(mDenseEntities[sparseIndex], mDenseEntities.back());
+            mSparseEntities[static_cast<std::size_t>(mDenseEntities[sparseIndex] & kEntityIndexMask)] = sparseEntity;
 
-            this->removePackedElement(index);
+            mDenseEntities.pop_back();
 
-            mSparseIndices[index] = kTombstone;
+            this->removePackedElement(sparseIndex);
+
+            mSparseEntities[index] = newSlot | kEntityIndexMask;
         }
 
         std::size_t size()
         {
-            return mDenseIndices.size();
+            return mDenseEntities.size();
         }
 
         void resizeSparseIndex(const std::size_t maxIndex)
         {
-            mSparseIndices.resize(maxIndex, kTombstone);
+            mSparseEntities.resize(maxIndex, kTombstone);
         }
 
-        const std::vector<std::size_t>& getDenseIndices() const
+        const std::vector<Entity>& getDenseEntities() const
         {
-            return mDenseIndices;
+            return mDenseEntities;
         }
 
         void dump()
@@ -74,13 +79,13 @@ namespace ec2s
 #ifndef NDEBUG
             std::cerr << "index dump (for debug) : \n";
             std::cerr << "sparse : \n";
-            for (int i = 0; auto & e : mSparseIndices)
+            for (int i = 0; auto & e : mSparseEntities)
             {
-                std::cerr << i++ << " : " << e << "\n";
+                std::cerr << i++ << " : " << static_cast<std::size_t>((e & kEntitySlotMask) >> kEntitySlotShiftWidth) << " | " << static_cast<std::size_t>((e & kEntityIndexMask)) << "\n";
             }
 
             std::cerr << "dense : \n";
-            for (int i = 0; auto & e : mDenseIndices)
+            for (int i = 0; auto & e : mDenseEntities)
             {
                 std::cerr << i++ << " : " << e << "\n";
             }
@@ -93,8 +98,8 @@ namespace ec2s
 
         virtual void removePackedElement(std::size_t index) = 0;
 
-        std::vector<std::size_t> mSparseIndices;
-        std::vector<std::size_t> mDenseIndices;
+        std::vector<Entity> mSparseEntities;
+        std::vector<Entity> mDenseEntities;
     };
 }
 
