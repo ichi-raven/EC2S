@@ -25,22 +25,22 @@ namespace ec2s
         }
 
         template<typename Func>
-        void each(Func f)
+        void each(Func func)
         {
             // 最もサイズの小さいSparseSetのDenseIndicesをイテレート
-            execEachByMinSizeSparseSet<Func, 0, ComponentType, OtherComponentTypes...>(f, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
+            execEachByMinSizeSparseSet<Func, 0, ComponentType, OtherComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
         }
 
         template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func>
-        void each(Func f)
+        void each(Func func)
         {
             if constexpr (sizeof...(OtherTargetComponentTypes) == 0)
             {
-                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(f, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
+                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
             }
             else
             {
-                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(f, searchMinSizeSparseSet<OtherTargetComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
+                execEachByMinSizeSparseSet<Func, 0, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherTargetComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
             }
         }
 

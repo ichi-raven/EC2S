@@ -92,7 +92,7 @@ namespace ec2s
 #endif
         }
 
-        constexpr virtual TypeHash getPackedTypeHash() const = 0;
+        //constexpr virtual TypeHash getPackedTypeHash() const = 0;
 
     protected:
 

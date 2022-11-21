@@ -69,12 +69,6 @@ namespace ec2s
 
             assert(sparseIndex < mPacked.size() || !"accessed by invalid entity!");
 
-            //if ((entity & kEntitySlotMask) != (sparseEntity & kEntitySlotMask))
-            //{
-            //    std::cerr << "debug entity : " << entity << "\n";
-            //    std::cerr << ((entity & kEntitySlotMask) >> kEntitySlotShiftWidth) << " : " << ((sparseEntity & kEntitySlotMask) >> kEntitySlotShiftWidth) << "\n";
-            //}
-
             assert((entity & kEntitySlotMask) == (sparseEntity & kEntitySlotMask) || !"accessed by invalid(deleted) entity!");
 
             return mPacked[sparseIndex];
@@ -99,7 +93,7 @@ namespace ec2s
             return mPacked[sparseIndex];
         }
 
-        template<typename Func>
+        template<typename Func, typename = std::enable_if_t<std::is_invocable_v<Func, T>>>
         void each(Func f)
         {
             for (auto& e : mPacked)
@@ -108,7 +102,16 @@ namespace ec2s
             }
         }
 
-        constexpr virtual TypeHash getPackedTypeHash() const
+        template<typename Func, typename = std::enable_if_t<std::is_invocable_v<Func, Entity, T>>>
+        void each(Func f, int dummy = 0)
+        {
+            for (std::size_t i = 0; i < mPacked.size(); ++i)
+            {
+                f(mDenseEntities[i], mPacked[i]);
+            }
+        }
+
+        constexpr TypeHash getPackedTypeHash() const
         {
             return TypeHashGenerator::id<T>();
         }

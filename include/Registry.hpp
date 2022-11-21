@@ -65,10 +65,23 @@ namespace ec2s
             mFreedEntities.emplace(entity + (1ull << kEntitySlotShiftWidth));
         }
 
-        template<typename T>
-        T& get(Entity entity)
+        template<typename Component>
+        Component& get(Entity entity)
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()])[entity];
+            return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHashGenerator::id<Component>()])[entity];
+        }
+
+        template<typename Component1, typename Component2, typename... OtherComponents>
+        std::tuple<Component1, Component2, OtherComponents...> get(Entity entity)
+        {
+            // TODO
+            assert(!"TODO");
+        }
+
+        template<typename T>
+        const std::vector<Entity>& getEntities()
+        {
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()]).getDenseEntities();
         }
 
         std::size_t activeEntityNum() const
@@ -118,6 +131,12 @@ namespace ec2s
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.each(func);
+        }
+
+        template<typename Component1, typename Component2, typename... OtherComponents, typename Func>
+        void each(Func func)
+        {
+            view<Component1, Component2, OtherComponents...>().each(func);
         }
 
         template<typename... Args>
