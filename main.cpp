@@ -12,11 +12,25 @@ int main()
 {
     test();
 
-    Entity sparseEntity = 0;
+    /*ec2s::Registry registry;
 
-    //std::cerr << std::hex << (((((sparseEntity & kEntitySlotMask) >> kEntitySlotShiftWidth) + 1) << kEntitySlotShiftWidth) | 1) << "\n";
+    for (int i = 0; i < 10; ++i)
+    {
+        registry.get<int>(registry.create<int>()) = i;
+    }
 
-    ec2s::Registry registry;
+    registry.each<int>([&](Entity entity, int a) 
+        { 
+            std::cout << a << "\n";
+            registry.destroy(entity);
+        });
+
+    std::cout << "second\n";
+
+    registry.each<int>([&](Entity entity, int a)
+        {
+            std::cout << a << "\n";
+        });*/
 
     return 0;
 }

@@ -55,14 +55,20 @@ namespace ec2s
             for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
             {
                 pSparseSet->remove(entity);
-
-                //if (pSparseSet->size() == 0)
-                //{
-                //    mComponentArrayMap.erase(typeHash);
-                //}
             }
 
-            mFreedEntities.emplace(entity + (1ull << kEntitySlotShiftWidth));
+            mFreedEntities.emplace(entity | (1ull << kEntitySlotShiftWidth));
+        }
+
+        void clear()
+        {
+            for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
+            {
+                pSparseSet->clear();
+            }
+
+            std::queue<Entity> empty;
+            std::swap(mFreedEntities, empty);
         }
 
         template<typename Component>
@@ -124,13 +130,28 @@ namespace ec2s
             ss.remove(entity);
         }
 
-        template<typename T, typename Func>
+        template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr >
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.each(func);
+        }
+
+        template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr >
+        void each(Func func)
+        {
+            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
+            assert(itr != mComponentArrayMap.end());
+            auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            ss.each(func);
+        }
+
+        template<typename T, typename Func, typename std::enable_if_t<!std::is_invocable_v<Func, T&> && !std::is_invocable_v<Func, Entity, T&>>>
+        void each(Func func)
+        {
+            static_assert(std::is_invocable_v<Func, T&> || std::is_invocable_v<Func, Entity, T&>, "ineligible Func type!");
         }
 
         template<typename Component1, typename Component2, typename... OtherComponents, typename Func>
@@ -142,7 +163,8 @@ namespace ec2s
         template<typename... Args>
         View<Args...> view()
         {
-            assert(hasAllTypesCalled<Args...>() || !"component type which requested by view is not contained in this registry!");
+            //assert(hasAllTypesCalled<Args...>() || !"component type which requested by view is not contained in this registry!");
+            checkAndAddNewComponent<Args...>();
             return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHashGenerator::id<Args>()])...);
         }
 
@@ -171,16 +193,24 @@ namespace ec2s
         }
 
         template<typename Head, typename... Tail>
-        bool hasAllTypesCalled()
+        inline bool checkAndAddNewComponent()
         {
-            if (!mComponentArrayMap.contains(TypeHashGenerator::id<Head>()))
+#ifndef NDEBUG
+            const TypeHash hash = TypeHashGenerator::id<Head>();
+#else
+            constexpr TypeHash hash = TypeHashGenerator::id<Head>();
+#endif
+
+            if (!mComponentArrayMap.contains(hash))
             {
+                auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
+                mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<Head>>(&itr->second));
                 return false;
             }
 
             if constexpr (sizeof...(Tail) > 0)
             {
-                hasAllTypesCalled<Tail...>();
+                checkAndAddNewComponent<Tail...>();
             }
 
             return true;

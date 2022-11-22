@@ -50,7 +50,7 @@ struct C
 
 void test()
 {
-    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e1);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
 
     std::chrono::high_resolution_clock::time_point start, end;
     double elapsed = 0;
@@ -149,7 +149,7 @@ void test()
         std::cout << "check : ";
         bool succeeded = true;
 
-        registry.each<A>([&](A e) {if (e.a != 1)   succeeded = false; });
+        registry.each<A>([&](const A e) {if (e.a != 1)   succeeded = false; });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -326,8 +326,8 @@ void test()
                     succeeded = false; 
                 }
 
-                registry.destroy(entities.back());
-                entities.pop_back();
+                //registry.destroy(entities.back());
+                //entities.pop_back();
             });
         if (succeeded)
         {
