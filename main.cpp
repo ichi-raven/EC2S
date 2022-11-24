@@ -8,29 +8,24 @@ void test();
 
 using namespace ec2s;
 
+struct Transform
+{
+    float pos[3];
+    float vel[3];
+    float acc[3];
+};
+
+struct Renderable
+{
+    uint32_t meshID;
+};
+
+struct Alive
+{};
+
 int main()
 {
     test();
-
-    /*ec2s::Registry registry;
-
-    for (int i = 0; i < 10; ++i)
-    {
-        registry.get<int>(registry.create<int>()) = i;
-    }
-
-    registry.each<int>([&](Entity entity, int a) 
-        { 
-            std::cout << a << "\n";
-            registry.destroy(entity);
-        });
-
-    std::cout << "second\n";
-
-    registry.each<int>([&](Entity entity, int a)
-        {
-            std::cout << a << "\n";
-        });*/
 
     return 0;
 }

@@ -50,7 +50,7 @@ struct C
 
 void test()
 {
-    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e6);
 
     std::chrono::high_resolution_clock::time_point start, end;
     double elapsed = 0;
@@ -325,9 +325,6 @@ void test()
                     std::cerr << e.a << "\n"; 
                     succeeded = false; 
                 }
-
-                //registry.destroy(entities.back());
-                //entities.pop_back();
             });
         if (succeeded)
         {

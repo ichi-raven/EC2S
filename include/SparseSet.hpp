@@ -62,25 +62,6 @@ namespace ec2s
             return mPacked[sparseIndex];
         }
 
-        //std::optional<std::size_t> getSparseIndexIfValid(const Entity entity)
-        //{
-        //    auto index = static_cast<size_t>(entity & kEntityIndexMask);
-        //    auto sparseEntity = mSparseEntities[index];
-        //    auto sparseIndex = static_cast<std::size_t>(sparseEntity & kEntityIndexMask);
-
-        //    if (sparseIndex < mPacked.size() && (entity & kEntitySlotMask) == (sparseEntity & kEntitySlotMask))
-        //    {
-        //        return std::make_optional<std::size_t>(sparseIndex);
-        //    }
-
-        //    return std::nullopt;
-        //}
-
-        //inline T& getBySparseIndex(const std::size_t sparseIndex)
-        //{
-        //    return mPacked[sparseIndex];
-        //}
-
         template<typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr >
         void each(Func f)
         {

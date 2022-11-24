@@ -60,7 +60,7 @@ namespace ec2s
     {
 #ifndef NDEBUG
 
-#           ifdef GENERATOR_PRETTY_FUNCTION
+#       ifdef GENERATOR_PRETTY_FUNCTION
         template<typename Type>
         static std::size_t id()
         {
@@ -75,16 +75,16 @@ namespace ec2s
 
             return hashVal;
         }
-#           else 
+#       else 
         template<typename Type>
         static std::size_t id()
         {
             static const std::size_t value = TypeIDGenerator<Type>::next();
             return value;
         }
-#           endif  
+#       endif  
 #else
-#           ifdef GENERATOR_PRETTY_FUNCTION
+#       ifdef GENERATOR_PRETTY_FUNCTION
         template<typename Type>
         static consteval std::size_t id()
         {
@@ -93,14 +93,14 @@ namespace ec2s
 
             return hashVal;
         }
-#           else
+#       else
         template<typename Type>
         static std::size_t id()
         {
             static const std::size_t value = TypeIDGenerator<Type>::next();
             return value;
         }
-#           endif
+#       endif
 #endif
 
     private:

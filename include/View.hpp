@@ -20,9 +20,7 @@ namespace ec2s
     public:
         View(SparseSet<ComponentType>& head, SparseSet<OtherComponentTypes>&... tails)
             : mSparseSets(head, tails...)
-        {
-
-        }
+        {}
 
         std::size_t getMinSize() const
         {
@@ -43,41 +41,19 @@ namespace ec2s
             execEachByMinSizeSparseSet<Func, 0, true, ComponentType, OtherComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
         }
 
-
-
         template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func, typename Traits::IsEligibleEachFunc<Func, TargetComponentType, OtherTargetComponentTypes...>* = nullptr>
         void each(Func func)
         {
-            //if constexpr (sizeof...(OtherTargetComponentTypes) == 0)
-            //{
-                execEachByMinSizeSparseSet<Func, 0, false, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
-            //}
-            //else
-            //{
-            //    //execEachByMinSizeSparseSet<Func, 0, false, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherTargetComponentTypes...>(std::get<SparseSet<TargetComponentType>&>(mSparseSets).size(), TypeHashGenerator::id<TargetComponentType>()));
-            //}
+            execEachByMinSizeSparseSet<Func, 0, false, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
         }
 
         template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, TargetComponentType, OtherTargetComponentTypes...>* = nullptr>
         void each(Func func)
         {
-            //if constexpr (sizeof...(OtherTargetComponentTypes) == 0)
-            //{
-                execEachByMinSizeSparseSet<Func, 0, true, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
-            //}
-            //else
-            //{
-                //execEachByMinSizeSparseSet<Func, 0, true, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherTargetComponentTypes...>(std::get<SparseSet<TargetComponentType>&>(mSparseSets).size(), TypeHashGenerator::id<TargetComponentType>()));
-            //}
+            execEachByMinSizeSparseSet<Func, 0, true, TargetComponentType, OtherTargetComponentTypes...>(func, searchMinSizeSparseSet<OtherComponentTypes...>(std::get<0>(mSparseSets).size(), TypeHashGenerator::id<ComponentType>()));
         }
 
     private:
-
-        //template<bool dummy = false>
-        //TypeHash searchMinSizeSparseSet(const std::size_t nowMin, const TypeHash hash)
-        //{
-        //    return hash;
-        //}
 
         template<typename Head, typename... Tail>
         std::size_t searchMinSize(const std::size_t nowMin) const 
@@ -132,20 +108,14 @@ namespace ec2s
                 {
                     for (const auto& entity : sparseSet.getDenseEntities())
                     {
-                        // sparseSetÇ≈Ç±ÇÍÇ‚Ç¡ÇøÇ·ÇæÇﬂÅ´
-                        //if (auto opIndex = sparseSet.getSparseIndexIfValid(entity))
-                        //{
-                            if constexpr (withEntity)
-                            {
-                                //f(entity, std::get<SparseSet<ComponentTypes>&>(mSparseSets).getBySparseIndex(*opIndex)...);
-                                f(entity, std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
-                            }
-                            else
-                            {
-                                //f(std::get<SparseSet<ComponentTypes>&>(mSparseSets).getBySparseIndex(*opIndex)...);
-                                f(std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
-                            }
-                        //}
+                        if constexpr (withEntity)
+                        {
+                            f(entity, std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
+                        }
+                        else
+                        {
+                            f(std::get<SparseSet<ComponentTypes>&>(mSparseSets)[entity]...);
+                        }
                     }
                 }
                 else
