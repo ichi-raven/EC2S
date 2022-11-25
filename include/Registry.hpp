@@ -1,3 +1,10 @@
+/*****************************************************************//**
+ * @file   Registry.hpp
+ * @brief  Registryクラスのヘッダファイル
+ * 
+ * @author ichi-raven
+ * @date   November 2022
+ *********************************************************************/
 #ifndef EC2S_REGISTRY_HPP_
 #define EC2S_REGISTRY_HPP_
 
@@ -57,7 +64,7 @@ namespace ec2s
                 pSparseSet->remove(entity);
             }
 
-            mFreedEntities.emplace(entity | (1ull << kEntitySlotShiftWidth));
+            mFreedEntities.emplace(static_cast<Entity>(entity | (1ull << kEntitySlotShiftWidth)));
         }
 
         void clear()
@@ -74,20 +81,20 @@ namespace ec2s
         template<typename Component>
         Component& get(Entity entity)
         {
-            return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHashGenerator::id<Component>()])[entity];
+            return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHasher::hash<Component>()])[entity];
         }
 
         template<typename Component1, typename Component2, typename... OtherComponents>
         std::tuple<Component1, Component2, OtherComponents...> get(Entity entity)
         {
-            // TODO
+            // TODO:
             assert(!"TODO");
         }
 
         template<typename T>
         const std::vector<Entity>& getEntities()
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()]).getDenseEntities();
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).getDenseEntities();
         }
 
         std::size_t activeEntityNum() const
@@ -98,16 +105,16 @@ namespace ec2s
         template<typename T>
         std::size_t size()
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHashGenerator::id<T>()]).size();
+            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).size();
         }
 
         template<typename T, typename... Args>
         void add(Entity entity, Args... args)
         {
 #ifndef NDEBUG
-            const TypeHash hash = TypeHashGenerator::id<T>();
+            const TypeHash hash = TypeHasher::hash<T>();
 #else
-            constexpr TypeHash hash = TypeHashGenerator::id<T>();
+            constexpr TypeHash hash = TypeHasher::hash<T>();
 #endif
 
             auto&& itr = mComponentArrayMap.find(hash);
@@ -124,7 +131,7 @@ namespace ec2s
         template<typename T>
         void remove(Entity entity)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
+            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.remove(entity);
@@ -133,7 +140,7 @@ namespace ec2s
         template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr >
         void each(Func func)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
+            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.each(func);
@@ -142,7 +149,7 @@ namespace ec2s
         template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr >
         void each(Func func)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHashGenerator::id<T>());
+            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
             auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             ss.each(func);
@@ -163,9 +170,8 @@ namespace ec2s
         template<typename... Args>
         View<Args...> view()
         {
-            //assert(hasAllTypesCalled<Args...>() || !"component type which requested by view is not contained in this registry!");
             checkAndAddNewComponent<Args...>();
-            return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHashGenerator::id<Args>()])...);
+            return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHasher::hash<Args>()])...);
         }
 
         void dump()
@@ -193,27 +199,24 @@ namespace ec2s
         }
 
         template<typename Head, typename... Tail>
-        inline bool checkAndAddNewComponent()
+        void checkAndAddNewComponent()
         {
 #ifndef NDEBUG
-            const TypeHash hash = TypeHashGenerator::id<Head>();
+            const TypeHash hash = TypeHasher::hash<Head>();
 #else
-            constexpr TypeHash hash = TypeHashGenerator::id<Head>();
+            constexpr TypeHash hash = TypeHasher::hash<Head>();
 #endif
 
             if (!mComponentArrayMap.contains(hash))
             {
                 auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
                 mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<Head>>(&itr->second));
-                return false;
             }
 
             if constexpr (sizeof...(Tail) > 0)
             {
                 checkAndAddNewComponent<Tail...>();
             }
-
-            return true;
         }
 
 

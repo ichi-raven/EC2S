@@ -9,13 +9,19 @@
 #define EC2S_ENTITY_HPP_
 
 #include <cstdint>
+#include <limits>
 
 namespace ec2s
 {
+	//! Entity型，世代スロット(32bit) | SparseSetへのインデックス(32bit)
 	using Entity = std::uint64_t;
-	constexpr std::uint64_t kEntitySlotMask  = 0xFFFFFFFF00000000;
-	constexpr std::uint64_t kEntityIndexMask = ~kEntitySlotMask;
-	constexpr std::uint64_t kEntitySlotShiftWidth = sizeof(Entity) * 4;
+
+	//! Entity型に対し，1をシフトしてスロット部分まで到達するようなシフト幅
+	constexpr Entity kEntitySlotShiftWidth = sizeof(Entity) * 4;
+	//! Entity型の値に対し，スロット部分を取得するビットマスク
+	constexpr Entity kEntitySlotMask  = std::numeric_limits<Entity>::max() << kEntitySlotShiftWidth;
+	//! Entity型の値に対し，インデックス部分を取得するビットマスク
+	constexpr Entity kEntityIndexMask = ~kEntitySlotMask;	
 }
 
 #endif

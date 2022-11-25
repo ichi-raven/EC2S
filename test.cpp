@@ -336,6 +336,15 @@ void test()
         }
     }
 
+    //{
+    //    std::cout << "DEBUG\n";
+    //    auto view = registry.view<B, C>();
+    //    view.each([&](B e1, C e2) 
+    //        {
+    //            std::cout << "called\n";
+    //        });
+    //}
+
     {
         std::cout << "destroy : \n";
         start = std::chrono::high_resolution_clock::now();

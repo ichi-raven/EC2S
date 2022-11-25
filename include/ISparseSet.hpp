@@ -40,7 +40,7 @@ namespace ec2s
                 return;
             }
 
-            const Entity sparseIndex = mSparseIndices[index];
+            const std::size_t sparseIndex = mSparseIndices[index];
             if (sparseIndex == kTombstone || (mDenseEntities[sparseIndex] & kEntitySlotMask) != (entity & kEntitySlotMask))
             {
                 return;

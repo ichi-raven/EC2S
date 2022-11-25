@@ -56,13 +56,13 @@ namespace ec2s
         return ((count ? fnv1a_32(s, count - 1) : 2166136261u) ^ s[count]) * 16777619u;
     }
 
-    struct TypeHashGenerator
+    struct TypeHasher
     {
 #ifndef NDEBUG
 
 #       ifdef GENERATOR_PRETTY_FUNCTION
         template<typename Type>
-        static std::size_t id()
+        static std::size_t hash()
         {
             constexpr std::string_view str(GENERATOR_PRETTY_FUNCTION);
             constexpr std::size_t hashVal = static_cast<std::size_t>(fnv1a_32(str.data(), str.size()));
@@ -77,7 +77,7 @@ namespace ec2s
         }
 #       else 
         template<typename Type>
-        static std::size_t id()
+        static std::size_t hash()
         {
             static const std::size_t value = TypeIDGenerator<Type>::next();
             return value;
@@ -86,7 +86,7 @@ namespace ec2s
 #else
 #       ifdef GENERATOR_PRETTY_FUNCTION
         template<typename Type>
-        static consteval std::size_t id()
+        static consteval std::size_t hash()
         {
             constexpr std::string_view str(GENERATOR_PRETTY_FUNCTION);
             constexpr std::size_t hashVal = static_cast<std::size_t>(fnv1a_32(str.data(), str.size()));
@@ -95,7 +95,7 @@ namespace ec2s
         }
 #       else
         template<typename Type>
-        static std::size_t id()
+        static std::size_t hash()
         {
             static const std::size_t value = TypeIDGenerator<Type>::next();
             return value;
