@@ -169,11 +169,11 @@ namespace ec2s
 
                 if constexpr (withEntity)
                 {
-                    func(entity, std::get<I>(mSparseSets).getBySparseIndex(sparseIndices[I], entity)...);
+                    func(entity, std::get<I>(tuple).getBySparseIndex(sparseIndices[I], entity)...);
                 }
                 else
                 {
-                    func(std::get<I>(mSparseSets).getBySparseIndex(sparseIndices[I], entity)...);
+                    func(std::get<I>(tuple).getBySparseIndex(sparseIndices[I], entity)...);
                 }
             }
         }
