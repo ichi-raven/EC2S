@@ -228,7 +228,7 @@ void test()
         std::cout << "time : " << elapsed << "[ms]\n\n";
     }
 
-    // composition of component(iŸ˜Y)
+    // composition of component
     // Entity 0 : A, C
     // Entity 1 : A, B
     // Entity 2 : A, C
