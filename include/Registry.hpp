@@ -99,7 +99,7 @@ namespace ec2s
 
         std::size_t activeEntityNum() const
         {
-            return mNextEntity - mFreedEntities.size();
+            return static_cast<std::size_t>(mNextEntity) - mFreedEntities.size();
         }
 
         template<typename T>
