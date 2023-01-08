@@ -11,8 +11,9 @@
 #include "SparseSet.hpp"
 #include "View.hpp"
 #include "Entity.hpp"
+#include "StackAny.hpp"
 
-#include <any>
+//#include <any>
 #include <unordered_map>
 #include <queue>
 #include <cassert>
@@ -81,7 +82,8 @@ namespace ec2s
         template<typename Component>
         Component& get(Entity entity)
         {
-            return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHasher::hash<Component>()])[entity];
+            //return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHasher::hash<Component>()])[entity];
+            return mComponentArrayMap[TypeHasher::hash<Component>()].get<SparseSet<Component>>()[entity];
         }
 
         template<typename Component1, typename Component2, typename... OtherComponents>
@@ -94,7 +96,8 @@ namespace ec2s
         template<typename T>
         const std::vector<Entity>& getEntities()
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).getDenseEntities();
+            //return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).getDenseEntities();
+            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().getDenseEntities();
         }
 
         std::size_t activeEntityNum() const
@@ -105,7 +108,8 @@ namespace ec2s
         template<typename T>
         std::size_t size()
         {
-            return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).size();
+            //return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).size();
+            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().size();
         }
 
         template<typename T, typename... Args>
@@ -121,10 +125,12 @@ namespace ec2s
             if (itr == mComponentArrayMap.end())
             {
                 itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
-                mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<T>>(&itr->second));
+                //mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<T>>(&itr->second));
+                mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
-            auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            auto& ss = itr->second.get<SparseSet<T>>();
             ss.emplace(entity, args...);
         }
 
@@ -133,7 +139,8 @@ namespace ec2s
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
-            auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            auto& ss = itr->second.get<SparseSet<T>>();
             ss.remove(entity);
         }
 
@@ -142,7 +149,8 @@ namespace ec2s
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
-            auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
         }
 
@@ -151,7 +159,8 @@ namespace ec2s
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             assert(itr != mComponentArrayMap.end());
-            auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+            auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
         }
 
@@ -171,7 +180,9 @@ namespace ec2s
         View<Args...> view()
         {
             checkAndAddNewComponent<Args...>();
-            return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHasher::hash<Args>()])...);
+            //return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHasher::hash<Args>()])...);
+            return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
+
         }
 
         void dump()
@@ -210,7 +221,8 @@ namespace ec2s
             if (!mComponentArrayMap.contains(hash))
             {
                 auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
-                mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<Head>>(&itr->second));
+                //mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<Head>>(&itr->second));
+                mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
             }
 
             if constexpr (sizeof...(Tail) > 0)
@@ -223,7 +235,9 @@ namespace ec2s
         Entity mNextEntity;
         std::queue<Entity> mFreedEntities;
 
-        std::unordered_map<TypeHash, std::any> mComponentArrayMap;
+        using Dummy_t = std::uint32_t;
+
+        std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };
 }

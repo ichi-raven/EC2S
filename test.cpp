@@ -79,7 +79,7 @@ void test()
             registry.add<A>(entities[i], 1);
             if (i % 2)
             {
-                registry.add<B>(entities[i], { 0.3 });
+                registry.add<B>(entities[i], 0.3);
             }
             else
             {

@@ -137,6 +137,7 @@
     <ClInclude Include="..\include\ISparseSet.hpp" />
     <ClInclude Include="..\include\Registry.hpp" />
     <ClInclude Include="..\include\SparseSet.hpp" />
+    <ClInclude Include="..\include\StackAny.hpp" />
     <ClInclude Include="..\include\Traits.hpp" />
     <ClInclude Include="..\include\TypeHash.hpp" />
     <ClInclude Include="..\include\View.hpp" />
