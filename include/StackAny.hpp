@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   StackAny.hpp
- * @brief  StackAnyクラスのヘッダファイル
+ * @brief  header file of StackAny class
  *
  * @author ichi-raven
  * @date   January 2023

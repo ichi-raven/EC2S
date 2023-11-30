@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   Entity.hpp
- * @brief  Entity型及びEntity用定数定義ヘッダファイル
+ * @brief  header file of Entity definition and some constants
  * 
  * @author ichi-raven
  * @date   November 2022
@@ -13,14 +13,14 @@
 
 namespace ec2s
 {
-	//! Entity型，世代スロット(32bit) | SparseSetへのインデックス(32bit)
+	//! Entity, gen slot(32bit) | index of SparseSet(32bit)
 	using Entity = std::uint64_t;
 
-	//! Entity型に対し，1をシフトしてスロット部分まで到達するようなシフト幅
+	//! For the Entity type, the shift width such that 1 is shifted to reach the slot part
 	constexpr Entity kEntitySlotShiftWidth = sizeof(Entity) * 4;
-	//! Entity型の値に対し，スロット部分を取得するビットマスク
+	//! Bitmask to obtain the slot portion for values of type Entity
 	constexpr Entity kEntitySlotMask  = std::numeric_limits<Entity>::max() << kEntitySlotShiftWidth;
-	//! Entity型の値に対し，インデックス部分を取得するビットマスク
+	//! Bit mask to get the index part for the value of Entity type
 	constexpr Entity kEntityIndexMask = ~kEntitySlotMask;	
 }
 

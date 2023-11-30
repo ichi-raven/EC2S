@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   View.hpp
- * @brief  ViewƒNƒ‰ƒX‚Ìƒwƒbƒ_ƒtƒ@ƒCƒ‹
+ * @brief  header file of View class
  * 
  * @author ichi-raven
  * @date   November 2022
@@ -15,9 +15,9 @@
 namespace ec2s
 {
     /**
-     * @brief  ViewƒNƒ‰ƒXCRegistry‚©‚ç¶¬‚µC•¡”Component‚É‘Î‚·‚éeach‚ğ’ñ‹Ÿ‚·‚é
-     * @tparam ComponentType ‚±‚ÌView‚ªQÆ‚·‚éComponentData‚ÌŒ^(Å’á1‚Â)
-     * @tparam OtherComponentTypes •¡”ComponentŒ^—p
+     * @brief  View class, generated from Registry, providing each for multiple Components
+     * @tparam ComponentType Type of ComponentData this View refers to (at least one)
+     * @tparam OtherComponentTypes For multiple Component types
      */
     template<typename ComponentType, typename... OtherComponentTypes>
     class View
@@ -25,18 +25,18 @@ namespace ec2s
     public:
 
         /** 
-         * @brief  ƒRƒ“ƒXƒgƒ‰ƒNƒ^
-         * @details ƒ†[ƒU‚Í©•ª‚Å‚±‚ê‚ğ\’z‚·‚é•K—v‚Í‚È‚¢
-         * @param head 1‚Â–Ú‚ÌComponentType‚ÌSparseSet‚ÌQÆ
-         * @param tails ˆÈ~‚ÌComponentType‚ÌSparseSet‚ÌQÆ
+         * @brief Constructor
+         * @details User does not need to build this
+         * @param head Reference to SparseSet of the first ComponentType
+         * @param tails Reference to the SparseSet of the subsequent ComponentType
          */
         View(SparseSet<ComponentType>& head, SparseSet<OtherComponentTypes>&... tails)
             : mSparseSets(head, tails...)
         {}
 
         /**
-         * @brief  QÆ‚µ‚Ä‚¢‚éSparseSet‚Ì’†‚ÅÅ‚à—v‘f”‚ª­‚È‚¢‚à‚Ì‚Ì—v‘f”‚ğ•Ô‚·
-         * @details ‚Â‚Ü‚èeach()‚Í‚±‚Ì‰ñ”‚¾‚¯Às‚³‚ê‚é
+        * @brief Returns the number of elements in the referenced SparseSet with the lowest number of elements
+         * @details i.e., each() is executed this many times
          */
         std::size_t getMinSize() const
         {
@@ -44,10 +44,10 @@ namespace ec2s
         }
 
         /**
-         * @brief  QÆ‚µ‚Ä‚¢‚éComponent‘S‚Ä‚É‘Î‚µ‚Äfunc‚ğÀs‚·‚é
-         * @tparam Func func‚ÌŒ^(„˜_‚³‚ê‚é)
-         * @tparam Traits::IsEligibleEachFunc ƒ†[ƒU‚Í‚±‚ê‚ğ“n‚·•K—v‚Í‚È‚¢, FuncŒ^‚ªQÆ‚µ‚Ä‚¢‚éComponent‚ğˆø”‚Æ‚µ‚Äó‚¯æ‚Á‚ÄÀs‰Â”\‚©‚Ç‚¤‚©
-         * @param func Às‚³‚ê‚éŠÖ”ƒIƒuƒWƒFƒNƒgCƒ‰ƒ€ƒ_®‚»‚Ì‘¼
+       * @brief Execute func on all referenced Components
+         * @tparam Func type of func (to be inferred)
+         * @tparam Traits::IsEligibleEachFunc user doesn't need to pass this, the Func type takes the referenced Component as argument and executable or not
+         * @param func Function object to be executed, lambda expression, etc.
          */
         template<typename Func, typename Traits::IsEligibleEachFunc<Func, ComponentType, OtherComponentTypes...>* = nullptr>
         void each(Func func)
@@ -56,10 +56,10 @@ namespace ec2s
         }
 
         /**
-         * @brief  QÆ‚µ‚Ä‚¢‚éComponent‘S‚Ä‚É‘Î‚µ‚ÄC‚»‚ÌEntity‚Æ‚Æ‚à‚Éfunc‚ğÀs‚·‚é
-         * @tparam Func func‚ÌŒ^(„˜_‚³‚ê‚é)
-         * @tparam Traits::IsEligibleEachFunc ƒ†[ƒU‚Í‚±‚ê‚ğ“n‚·•K—v‚Í‚È‚¢, FuncŒ^‚ªEntity‹y‚ÑQÆ‚µ‚Ä‚¢‚éComponent‚ğˆø”‚Æ‚µ‚Äó‚¯æ‚Á‚ÄÀs‰Â”\‚©‚Ç‚¤‚©
-         * @param func Às‚³‚ê‚éŠÖ”ƒIƒuƒWƒFƒNƒgCƒ‰ƒ€ƒ_®‚»‚Ì‘¼
+         * @brief  ?Q????????Component?S???????C????Entity??????func?????s????
+         * @tparam Func func??^(???_?????)
+         * @tparam Traits::IsEligibleEachFunc ???[?U??????n???K?v????, Func?^??Entity?y?ï¿½ï¿½Q????????Component??????????????????s??\???????
+         * @param func ???s????????I?u?W?F?N?g?C?????_???????
          */
         template<typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, ComponentType, OtherComponentTypes...>* = nullptr>
         void each(Func func)
@@ -68,12 +68,10 @@ namespace ec2s
         }
 
         /** 
-         * @brief  View‚ªQÆ‚µ‚Ä‚¢‚éComponent‚Ì‚¤‚¿w’è‚µ‚½‚à‚Ì‚É‚Â‚¢‚Äfunc‚ğÀs‚·‚é
-         * @tparam TargetComponentType w’è‚·‚éComponentŒ^‚Ìæ“ª(1‚ÂˆÈã)
-         * @tparam OtherTargetComponentTypes ˆÈ~‚ÌComponentŒ^
-         * @tparam Func func‚ÌŒ^(„˜_‚³‚ê‚é)
-         * @tparam Traits::IsEligibleEachFunc ƒ†[ƒU‚Í‚±‚ê‚ğ“n‚·•K—v‚Í‚È‚¢, FuncŒ^‚ªEntity‹y‚ÑQÆ‚µ‚Ä‚¢‚éComponent‚ğˆø”‚Æ‚µ‚Äó‚¯æ‚Á‚ÄÀs‰Â”\‚©‚Ç‚¤‚©
-         * @param  func Às‚³‚ê‚éŠÖ”ƒIƒuƒWƒFƒNƒgCƒ‰ƒ€ƒ_®‚»‚Ì‘¼
+         * @brief Execute func with its Entity for all referenced Components
+         * @tparam Func type of func (to be inferred)
+         * @tparam Traits::IsEligibleEachFunc user does not need to pass this, whether the func type can take Entity and referenced Component as arguments and execute it
+         * @param func Function object to be executed, lambda expression, etc.
          */
         template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func, typename Traits::IsEligibleEachFunc<Func, TargetComponentType, OtherTargetComponentTypes...>* = nullptr>
         void each(Func func)
@@ -82,12 +80,12 @@ namespace ec2s
         }
 
         /**
-         * @brief  View‚ªQÆ‚µ‚Ä‚¢‚éComponent‚Ì‚¤‚¿w’è‚µ‚½‚à‚Ì‚É‚Â‚¢‚Äfunc‚ğÀs‚·‚é
-         * @tparam TargetComponentType w’è‚·‚éComponentŒ^‚Ìæ“ª(1‚ÂˆÈã)
-         * @tparam OtherTargetComponentTypes ˆÈ~‚ÌComponentŒ^
-         * @tparam Func func‚ÌŒ^(„˜_‚³‚ê‚é)
-         * @tparam Traits::IsEligibleEachFunc ƒ†[ƒU‚Í‚±‚ê‚ğ“n‚·•K—v‚Í‚È‚¢, FuncŒ^‚ªEntity‹y‚ÑQÆ‚µ‚Ä‚¢‚éComponent‚ğˆø”‚Æ‚µ‚Äó‚¯æ‚Á‚ÄÀs‰Â”\‚©‚Ç‚¤‚©
-         * @param  func Às‚³‚ê‚éŠÖ”ƒIƒuƒWƒFƒNƒgCƒ‰ƒ€ƒ_®‚»‚Ì‘¼
+         * @brief Execute func on the specified Component referenced by View
+         * @tparam TargetComponentType The first (one or more) of the specified Component types
+         * @tparam OtherTargetComponentTypes Subsequent Component types
+         * @tparam Func Func type (to be inferred)
+         * @tparam Traits::IsEligibleEachFunc user does not need to pass this, whether the func type can take Entity and the referenced Component as arguments and execute it
+         * @param func Function object to be executed, lambda expression, etc.
          */
         template<typename TargetComponentType, typename... OtherTargetComponentTypes, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, TargetComponentType, OtherTargetComponentTypes...>* = nullptr>
         void each(Func func)
@@ -98,7 +96,7 @@ namespace ec2s
     private:
 
         /**
-         * @brief  mSparseSetsƒ^ƒvƒ‹‚Ì’†‚©‚çÅ‚à¬‚³‚¢ƒTƒCƒY‚ÌSparseSet‚ğ’T‚µC‚»‚ÌƒTƒCƒY‚ğ•Ô‚·
+         * @brief  Finds the smallest SparseSet in the mSparseSets tuple and returns its size
          */
         template<typename Head, typename... Tail>
         std::size_t searchMinSize(const std::size_t nowMin) const 
@@ -107,7 +105,7 @@ namespace ec2s
         }
 
         /**
-         * @brief  mSparseSetsƒ^ƒvƒ‹‚Ì’†‚©‚çÅ‚à¬‚³‚¢ƒTƒCƒY‚ÌSparseSet‚ğ’T‚µC‚»‚ÌSparseSet‚ÌŒ^‚ÌƒnƒbƒVƒ…’l‚ğ•Ô‚·
+         * @brief  Finds the minimum size SparseSet from the hash value and invokeIfValidEntity on its DenseEntities
          */
         template<typename Head, typename... Tail>
         TypeHash searchMinSizeSparseSet(const std::size_t nowMin, const TypeHash hash) const
@@ -132,7 +130,7 @@ namespace ec2s
         }
 
         /**
-         * @brief  Å¬ƒTƒCƒY‚ÌSparseSet‚ğƒnƒbƒVƒ…’l‚©‚çŒ©‚Â‚¯C‚»‚ÌDenseEntities‚É‘Î‚µ‚ÄinvokeIfValidEntity‚ğÀs‚·‚é
+         * @brief  Find the minimum size SparseSet in the hash value and invokeIfValidEntity on its DenseEntities
          */
         template<typename Func, size_t SSIndex, bool withEntity, typename... ComponentTypes>
         void invokeByMinSizeSparseSet(Func func, TypeHash hash)
@@ -153,7 +151,7 @@ namespace ec2s
         }
 
         /**
-         * @brief  w’è‚µ‚½ŠeSparseSet‚É‘Î‚µ‚ÄCentities‚Ì‚¤‚¿‘S‚Ä‚Å—LŒø‚¾‚Á‚½entity‚Åfunc‚ğÀs‚·‚é
+         * @brief  For each specified SparseSet, executes func with the entities that were valid in all of the entities
          */
         template<bool withEntity, typename T, T... I, typename Func, typename Tuple>
         void invokeIfValidEntity(Func func, const std::vector<Entity>& entities, Tuple& tuple, std::integer_sequence<T, I...>)

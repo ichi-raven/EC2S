@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   TypeHash.hpp
- * @brief  TypeHashGeneratorクラス及び環境依存マクロのヘッダファイル
+ * @brief  header file of TypeHashGenerator class and compiler-dependent macros
  * 
  * @author ichi-raven
  * @date   November 2022

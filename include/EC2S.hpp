@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   EC2S.hpp
- * @brief  EC2Sの主要ファイルをまとめてincludeするヘッダファイル
+ * @brief  header file of whole EC2S
  * 
  * 
  * @author ichi-raven

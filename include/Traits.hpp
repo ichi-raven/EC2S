@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   Traits.hpp
- * @brief  必要なTraitを定義するヘッダファイル
+ * @brief  header file of trait definitions
  * 
  * @author ichi-raven
  * @date   November 2022

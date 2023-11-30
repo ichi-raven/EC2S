@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   ISparseSet.hpp
- * @brief  ISparseSetクラスのヘッダファイル
+ * @brief  header file of ISparseSet class
  * 
  * @author ichi-raven
  * @date   November 2022

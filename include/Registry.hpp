@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   Registry.hpp
- * @brief  Registryクラスのヘッダファイル
+ * @brief  header file of Registry class
  * 
  * @author ichi-raven
  * @date   November 2022

@@ -1,8 +1,5 @@
 #include "include/EC2S.hpp"
 
-#include <iostream>
-#include <chrono>
-#include <iomanip>
 
 void test();
 

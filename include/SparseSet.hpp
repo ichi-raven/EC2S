@@ -1,6 +1,6 @@
 /*****************************************************************//**
  * @file   SparseSet.hpp
- * @brief  SparseSetクラスのヘッダファイル
+ * @brief  header file of SparseSet class
  * 
  * @author ichi-raven
  * @date   November 2022
