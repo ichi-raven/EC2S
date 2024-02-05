@@ -8,3 +8,5 @@
  *********************************************************************/
 
 #include "Registry.hpp"
+// optional
+#include "Application.hpp"

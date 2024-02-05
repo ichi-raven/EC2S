@@ -133,6 +133,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\Application.hpp" />
     <ClInclude Include="..\include\Entity.hpp" />
     <ClInclude Include="..\include\ISparseSet.hpp" />
     <ClInclude Include="..\include\Registry.hpp" />
