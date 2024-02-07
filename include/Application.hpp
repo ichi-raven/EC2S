@@ -100,7 +100,6 @@ namespace ec2s
         using Factory_t = std::function<Scene_t()>;
 
     public:
-        template <typename T>
         Application()
             : mpCommonRegion(std::make_shared<CommonRegion>())
             , mEndFlag(false)
