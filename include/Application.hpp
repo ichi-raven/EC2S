@@ -1,4 +1,3 @@
-// ‘O•ûéŒ¾‚Ì‚İ
 namespace ec2s
 {
     template <typename Key, typename CommonRegion>
@@ -8,7 +7,8 @@ namespace ec2s
     class State;
 }  // namespace ec2s
 
-#pragma once
+#ifndef EC2S_EC2S_APPLICATION_HPP_
+#define EC2S_EC2S_APPLICATION_HPP_
 
 #include <cassert>
 #include <functional>
@@ -204,3 +204,5 @@ namespace ec2s
     };
 
 };  // namespace ec2s
+
+#endif
