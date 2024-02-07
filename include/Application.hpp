@@ -5,7 +5,7 @@ namespace ec2s
     class Application;
 
     template <typename Key, typename CommonRegion>
-    class Scene;
+    class State;
 }  // namespace ec2s
 
 #pragma once
@@ -17,13 +17,13 @@ namespace ec2s
 #include <string>
 #include <unordered_map>
 
-#define GEN_SCENE(SCENE_TYPE, KEY_TYPE, COMMONREGION_TYPE)                                                                   \
+#define GEN_STATE(STATE_TYPE, KEY_TYPE, COMMONREGION_TYPE)                                                                   \
 public:                                                                                                                      \
-    SCENE_TYPE(ec2s::Application<KEY_TYPE, COMMONREGION_TYPE>* application, std::shared_ptr<COMMONREGION_TYPE> commonRegion) \
-        : Scene(application, commonRegion)                                                                                   \
+    STATE_TYPE(ec2s::Application<KEY_TYPE, COMMONREGION_TYPE>* application, std::shared_ptr<COMMONREGION_TYPE> commonRegion) \
+        : State(application, commonRegion)                                                                                   \
     {                                                                                                                        \
     }                                                                                                                        \
-    virtual ~SCENE_TYPE() override;                                                                                          \
+    virtual ~STATE_TYPE() override;                                                                                          \
     virtual void init() override;                                                                                            \
     virtual void update() override;                                                                                          \
                                                                                                                              \
@@ -32,22 +32,23 @@ private:
 namespace ec2s
 {
 
-    template <typename Key_t, typename CommonRegion>
-    class Scene
+    template <typename Key_t, typename CommonRegion_t>
+    class State
     {
     private:  
-        using Application_t = Application<Key_t, CommonRegion>;
+        using Application_t = Application<Key_t, CommonRegion_t>;
 
     public: 
-        Scene() = delete;
+        State() = delete;
 
-        Scene(Application_t* pApplication, std::shared_ptr<CommonRegion> pCommonRegion)
+        State(Application_t* pApplication, std::shared_ptr<CommonRegion_t> pCommonRegion)
             : mpApplication(pApplication)
             , mpCommonRegion(pCommonRegion)
+            , mStateChanged(false)
         {
         }
 
-        virtual ~Scene(){};
+        virtual ~State(){};
 
         virtual void init() = 0;
 
@@ -64,13 +65,13 @@ namespace ec2s
         }
 
     protected: 
-        void changeScene(const Key_t& dstSceneKey, bool cachePrevScene = false)
+        void changeState(const Key_t& dstStateKey, bool cachePrevState = false)
         {
-            mSceneChanged = true;
-            mpApplication->changeScene(dstSceneKey, cachePrevScene);
+            mStateChanged = true;
+            mpApplication->changeState(dstStateKey, cachePrevState);
         }
 
-        void resetScene()
+        void resetState()
         {
             initAll();
         }
@@ -80,28 +81,28 @@ namespace ec2s
             mpApplication->dispatchEnd();
         }
 
-        const std::shared_ptr<CommonRegion>& getCommonRegion() const
+        const std::shared_ptr<CommonRegion_t>& getCommonRegion() const
         {
             return mpCommonRegion;
         }
 
     private: 
-        std::shared_ptr<CommonRegion> mpCommonRegion;
+        std::shared_ptr<CommonRegion_t> mpCommonRegion;
         Application_t* mpApplication;  
 
-        bool mSceneChanged;
+        bool mStateChanged;
     };
 
-    template <typename Key_t, typename CommonRegion>
+    template <typename Key_t, typename CommonRegion_t>
     class Application
     {
     private:  
-        using Scene_t   = std::shared_ptr<Scene<Key_t, CommonRegion>>;
-        using Factory_t = std::function<Scene_t()>;
+        using State_t   = std::shared_ptr<State<Key_t, CommonRegion_t>>;
+        using Factory_t = std::function<State_t()>;
 
     public:
         Application()
-            : mpCommonRegion(std::make_shared<CommonRegion>())
+            : mpCommonRegion(std::make_shared<CommonRegion_t>())
             , mEndFlag(false)
         {
 
@@ -117,15 +118,15 @@ namespace ec2s
         {
         }
 
-        void init(const Key_t& firstSceneKey)
+        void init(const Key_t& firstStateKey)
         {
-            mFirstSceneKey = firstSceneKey;
+            mFirstStateKey = firstStateKey;
             mEndFlag       = false;
 
-            assert(mFirstSceneKey);
+            assert(mFirstStateKey);
 
-            mCurrent.first  = mFirstSceneKey.value();
-            mCurrent.second = mScenesFactory[mFirstSceneKey.value()]();
+            mCurrent.first  = mFirstStateKey.value();
+            mCurrent.second = mStatesFactory[mFirstStateKey.value()]();
         }
 
         void update()
@@ -133,10 +134,10 @@ namespace ec2s
             mCurrent.second->updateAll();
         }
 
-        template <typename InheritedScene>
-        void addScene(const Key_t& key)
+        template <typename InheritedState>
+        void addState(const Key_t& key)
         {
-            if (mScenesFactory.find(key) != mScenesFactory.end())
+            if (mStatesFactory.find(key) != mStatesFactory.end())
             {
 #ifndef NDEBUG
                 assert(!"this key already exist!");
@@ -145,39 +146,39 @@ namespace ec2s
                 return;
             }
 
-            mScenesFactory.emplace(key,
+            mStatesFactory.emplace(key,
                                    [&]()
                                    {
-                                       auto&& m = std::make_shared<InheritedScene>(this, mpCommonRegion);
+                                       auto&& m = std::make_shared<InheritedState>(this, mpCommonRegion);
                                        m->initAll();
 
                                        return m;
                                    });
 
-            if (!mFirstSceneKey)
+            if (!mFirstStateKey)
             {
-                mFirstSceneKey = key;
+                mFirstStateKey = key;
             }
         }
 
-        void changeScene(const Key_t& dstSceneKey, const bool cachePrevScene = false)
+        void changeState(const Key_t& dstStateKey, const bool cachePrevState = false)
         {
-            assert(mScenesFactory.find(dstSceneKey) != mScenesFactory.end());
+            assert(mStatesFactory.find(dstStateKey) != mStatesFactory.end());
 
-            if (cachePrevScene)
+            if (cachePrevState)
             {
                 mCache = mCurrent;
             }
 
-            if (mCache && dstSceneKey == mCache.value().first)
+            if (mCache && dstStateKey == mCache.value().first)
             {
                 mCurrent = mCache.value();
                 mCache   = std::nullopt;
             }
             else
             {
-                mCurrent.first  = dstSceneKey;
-                mCurrent.second = mScenesFactory[dstSceneKey]();
+                mCurrent.first  = dstStateKey;
+                mCurrent.second = mStatesFactory[dstStateKey]();
             }
         }
 
@@ -192,13 +193,13 @@ namespace ec2s
         }
 
     public:
-        std::shared_ptr<CommonRegion> mpCommonRegion;
+        std::shared_ptr<CommonRegion_t> mpCommonRegion;
 
     private:
-        std::unordered_map<Key_t, Factory_t> mScenesFactory;
-        std::pair<Key_t, Scene_t> mCurrent;
-        std::optional<std::pair<Key_t, Scene_t>> mCache;
-        std::optional<Key_t> mFirstSceneKey; 
+        std::unordered_map<Key_t, Factory_t> mStatesFactory;
+        std::pair<Key_t, State_t> mCurrent;
+        std::optional<std::pair<Key_t, State_t>> mCache;
+        std::optional<Key_t> mFirstStateKey; 
         bool mEndFlag;
     };
 
