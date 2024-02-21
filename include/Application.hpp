@@ -35,10 +35,10 @@ namespace ec2s
     template <typename Key_t, typename CommonRegion_t>
     class State
     {
-    private:  
+    private:
         using Application_t = Application<Key_t, CommonRegion_t>;
 
-    public: 
+    public:
         State() = delete;
 
         State(Application_t* pApplication, std::shared_ptr<CommonRegion_t> pCommonRegion)
@@ -64,7 +64,7 @@ namespace ec2s
             update();
         }
 
-    protected: 
+    protected:
         void changeState(const Key_t& dstStateKey, bool cachePrevState = false)
         {
             mStateChanged = true;
@@ -86,9 +86,14 @@ namespace ec2s
             return mpCommonRegion;
         }
 
-    private: 
-        std::shared_ptr<CommonRegion_t> mpCommonRegion;
-        Application_t* mpApplication;  
+        const std::shared_ptr<CommonRegion_t>& get() const
+        {
+            return mpCommonRegion;
+        }
+
+    private:
+        CommonRegion_t* mpCommonRegion;
+        Application_t* mpApplication;
 
         bool mStateChanged;
     };
@@ -96,7 +101,7 @@ namespace ec2s
     template <typename Key_t, typename CommonRegion_t>
     class Application
     {
-    private:  
+    private:
         using State_t   = std::shared_ptr<State<Key_t, CommonRegion_t>>;
         using Factory_t = std::function<State_t()>;
 
@@ -105,7 +110,6 @@ namespace ec2s
             : mpCommonRegion(std::make_shared<CommonRegion_t>())
             , mEndFlag(false)
         {
-
         }
 
         // Noncopyable, Nonmoveable
@@ -199,7 +203,7 @@ namespace ec2s
         std::unordered_map<Key_t, Factory_t> mStatesFactory;
         std::pair<Key_t, State_t> mCurrent;
         std::optional<std::pair<Key_t, State_t>> mCache;
-        std::optional<Key_t> mFirstStateKey; 
+        std::optional<Key_t> mFirstStateKey;
         bool mEndFlag;
     };
 
