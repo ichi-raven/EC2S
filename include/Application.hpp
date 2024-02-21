@@ -92,7 +92,7 @@ namespace ec2s
         }
 
     private:
-        CommonRegion_t* mpCommonRegion;
+        std::shared_ptr<CommonRegion_t> mpCommonRegion;
         Application_t* mpApplication;
 
         bool mStateChanged;
