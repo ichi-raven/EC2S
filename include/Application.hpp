@@ -86,6 +86,12 @@ namespace ec2s
             return mpCommonRegion;
         }
 
+
+        const std::shared_ptr<CommonRegion_t>& get() const
+        {
+            return mpCommonRegion;
+        }
+
     private:
         std::shared_ptr<CommonRegion_t> mpCommonRegion;
         Application_t* mpApplication;
