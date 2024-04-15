@@ -75,10 +75,9 @@ namespace ec2s
         template <typename Func>
         void schedule(const Func f)
         {
-            std::function<void()> dummy = [f]() { f(); };
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                mJobs.emplace(Job{ .mTask = dummy });
+                mJobs.emplace(Job{ .mTask = f });
             }
 
             mConditionVariable.notify_one();
