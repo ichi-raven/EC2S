@@ -66,7 +66,7 @@ void test()
         std::cout << "create and emplace : \n";
         start = std::chrono::high_resolution_clock::now();
 
-        // composition of component(iŸ˜Y)
+        // composition of component
         // Entity 0 : A, C
         // Entity 1 : A, B
         // Entity 2 : A, C

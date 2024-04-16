@@ -50,9 +50,9 @@ namespace ec2s
                             Job job;
                             {
                                 std::unique_lock<std::mutex> lock(mMutex);
-                                mConditionVariable.wait(lock, [this] { return !mJobs.empty() || mStop; });
+                                mConditionVariable.wait(lock, [this] { return !mJobs.empty(); });
 
-                                if (mStop)
+                                if (mStop && mJobs.empty())
                                 {
                                     return;
                                 }
