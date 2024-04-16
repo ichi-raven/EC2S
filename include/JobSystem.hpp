@@ -67,7 +67,14 @@ namespace ec2s
 
         ~JobSystem()
         {
-            stop();
+            if (!mStop)
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                if (!mStop)
+                {
+                    stop();
+                }
+            }
         }
 
         template <typename Func>
@@ -85,7 +92,7 @@ namespace ec2s
             JobHandle handle;
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                handle = mJobs.emplace(Job{ .task = f });
+                handle = &(mJobs.emplace(Job{ .task = f }));
             }
 
             mConditionVariable.notify_one();
@@ -111,11 +118,6 @@ namespace ec2s
             }
         }
 
-        void waitEnd()
-        {
-
-        }
-
         void stop()
         {
             {
@@ -135,7 +137,7 @@ namespace ec2s
         std::vector<std::thread> mWorkerThreads;
 
         std::condition_variable mConditionVariable;
-        
+
         // async-------------
         std::mutex mMutex;
         std::queue<Job> mJobs;

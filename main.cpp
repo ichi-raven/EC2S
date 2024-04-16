@@ -8,7 +8,7 @@ using namespace ec2s;
 
 void heavyTask()
 {
-    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e2);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(kTestEntityNum);
 
@@ -53,30 +53,47 @@ int main()
 
     const auto task = [&]()
     {
-        {
-            std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
-        }
+        //{
+        //    std::unique_lock lock(mut);
+        //    std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
+        //}
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
         heavyTask();
 
-        {
-            std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
-        }
+        //{
+        //    std::unique_lock lock(mut);
+        //    std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
+        //}
     };
 
     std::chrono::high_resolution_clock::time_point start, end;
 
     // parallel
-    start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < 100; ++i)
     {
-        jobSystem.schedule(task);
+        start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < 100; ++i)
+        {
+            jobSystem.exec(task);
+        }
+
+        jobSystem.stop();
+        end = std::chrono::high_resolution_clock::now();
+
+        const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+        std::cout << "parallel : " << elapsed << "[ms]\n";
     }
 
-    std::cout << "parallel : "
+    // serial
+    {
+        start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < 100; ++i)
+        {
+            task();
+        }
+        end                = std::chrono::high_resolution_clock::now();
+        const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+        std::cout << "serial : " << elapsed << "[ms]\n";
+    }
 
-        return 0;
+    return 0;
 }
