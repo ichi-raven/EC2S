@@ -25,13 +25,11 @@ namespace ec2s
     private:
         struct Job
         {
-            std::function<void()> mTask;
-
-            void execute()
-            {
-                mTask();
-            }
+            std::function<void()> task;
         };
+
+    public:
+        using JobHandle = Job*;
 
     public:
         JobSystem(const uint32_t workerThreadNum)
@@ -50,7 +48,7 @@ namespace ec2s
                             Job job;
                             {
                                 std::unique_lock<std::mutex> lock(mMutex);
-                                mConditionVariable.wait(lock, [this] { return !mJobs.empty(); });
+                                mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
 
                                 if (mStop && mJobs.empty())
                                 {
@@ -61,7 +59,7 @@ namespace ec2s
                                 mJobs.pop();
                             }
 
-                            job.execute();
+                            job.task();
                         }
                     });
             }
@@ -73,14 +71,49 @@ namespace ec2s
         }
 
         template <typename Func>
-        void schedule(const Func f)
+        JobHandle schedule(const Func f)
         {
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                mJobs.emplace(Job{ .mTask = f });
+                return &(mJobs.emplace(Job{ .task = f }));
+            }
+        }
+
+        template <typename Func>
+        JobHandle exec(const Func f)
+        {
+            JobHandle handle;
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                handle = mJobs.emplace(Job{ .task = f });
             }
 
             mConditionVariable.notify_one();
+            return handle;
+        }
+
+        void exec()
+        {
+            uint32_t jobNum = 0;
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                jobNum = mJobs.size();
+            }
+
+            mConditionVariable.notify_all();
+
+            if (jobNum > mWorkerThreads.size())
+            {
+                for (int i = 0; i < jobNum - mWorkerThreads.size(); ++i)
+                {
+                    mConditionVariable.notify_one();
+                }
+            }
+        }
+
+        void waitEnd()
+        {
+
         }
 
         void stop()
@@ -100,10 +133,14 @@ namespace ec2s
 
     private:
         std::vector<std::thread> mWorkerThreads;
-        std::queue<Job> mJobs;
+
         std::condition_variable mConditionVariable;
+        
+        // async-------------
         std::mutex mMutex;
+        std::queue<Job> mJobs;
         bool mStop;
+        // ------------------
     };
 
 }  // namespace ec2s

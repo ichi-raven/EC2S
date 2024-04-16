@@ -15,7 +15,7 @@
 
 #include <cassert>
 
-#ifndef EC2S_CHECK_SYNONYM
+#ifdef EC2S_CHECK_SYNONYM
 #include <unordered_map>
 #endif
 
@@ -58,7 +58,7 @@ namespace ec2s
 
     struct TypeHasher
     {
-#ifndef EC2S_CHECK_SYNONYM
+#ifdef EC2S_CHECK_SYNONYM
 
 #       ifdef GENERATOR_PRETTY_FUNCTION
         template<typename Type>
@@ -113,7 +113,7 @@ namespace ec2s
             }
         };
 
-#ifndef EC2S_CHECK_SYNONYM
+#ifdef EC2S_CHECK_SYNONYM
         inline static std::unordered_map<std::size_t, std::string_view> hashHistory = std::unordered_map<std::size_t, std::string_view>();
 #endif
 

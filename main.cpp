@@ -1,5 +1,7 @@
 #include "include/EC2S.hpp"
 
+#include <iostream>
+
 void test();
 
 using namespace ec2s;
@@ -47,49 +49,34 @@ int main()
     ec2s::JobSystem jobSystem(4);
     ec2s::Registry registry;
 
-    jobSystem.schedule(
-        [&]()
-        {
-            std::cout << "thread ID : " << std::this_thread::get_id() << "\n";
-            //std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-            heavyTask();
-            std::cout << std::this_thread::get_id() << "end\n";
-        });
-    jobSystem.schedule(
-        [&]()
-        {
-            std::cout << "thread ID : " << std::this_thread::get_id() << "\n";
-            //std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-            heavyTask();
-            std::cout << std::this_thread::get_id() << "end\n";
-        });
-    jobSystem.schedule(
-        [&]()
-        {
-            std::cout << "thread ID : " << std::this_thread::get_id() << "\n";
-            //std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-            heavyTask();
-            std::cout << std::this_thread::get_id() << "end\n";
-        });
-    jobSystem.schedule(
-        [&]()
-        {
-            std::cout << "thread ID : " << std::this_thread::get_id() << "\n";
-            //std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-            heavyTask();
-            std::cout << std::this_thread::get_id() << "end\n";
-        });
+    std::mutex mut;
 
-    // additional
-    jobSystem.schedule(
-        [&]()
+    const auto task = [&]()
+    {
         {
-            std::cout << "thread ID : " << std::this_thread::get_id() << "\n";
-            //std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-            heavyTask();
-            std::cout << std::this_thread::get_id() << "end\n";
-        });
+            std::unique_lock lock(mut);
+            std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
+        }
 
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+        heavyTask();
 
-    return 0;
+        {
+            std::unique_lock lock(mut);
+            std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
+        }
+    };
+
+    std::chrono::high_resolution_clock::time_point start, end;
+
+    // parallel
+    start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < 100; ++i)
+    {
+        jobSystem.schedule(task);
+    }
+
+    std::cout << "parallel : "
+
+        return 0;
 }
