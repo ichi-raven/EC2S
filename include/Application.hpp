@@ -87,7 +87,7 @@ namespace ec2s
         }
 
 
-        const std::shared_ptr<CommonRegion_t>& get() const
+        const std::shared_ptr<CommonRegion_t>& common() const
         {
             return mpCommonRegion;
         }
