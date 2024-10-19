@@ -138,7 +138,11 @@ namespace ec2s
         void remove(Entity entity)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
-            assert(itr != mComponentArrayMap.end());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
+
             //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.remove(entity);
@@ -148,7 +152,10 @@ namespace ec2s
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
-            assert(itr != mComponentArrayMap.end());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
             //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
@@ -158,7 +165,10 @@ namespace ec2s
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
-            assert(itr != mComponentArrayMap.end());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
             //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
