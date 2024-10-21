@@ -109,6 +109,10 @@ namespace ec2s
         std::size_t size()
         {
             //return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).size();
+            if (!mComponentArrayMap.contains(TypeHasher::hash<T>()))
+            {
+                return 0;
+            }
             return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().size();
         }
 

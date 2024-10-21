@@ -104,7 +104,7 @@ namespace ec2s
             uint32_t jobNum = 0;
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                jobNum = mJobs.size();
+                jobNum = static_cast<uint32_t>(mJobs.size());
             }
 
             mConditionVariable.notify_all();
