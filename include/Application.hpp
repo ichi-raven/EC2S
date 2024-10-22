@@ -110,6 +110,7 @@ namespace ec2s
         Application()
             : mpCommonRegion(std::make_shared<CommonRegion_t>())
             , mEndFlag(false)
+            , mChangedFlag(false)
         {
         }
 
