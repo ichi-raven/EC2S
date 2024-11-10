@@ -133,6 +133,11 @@ namespace ec2s
             }
         }
 
+        uint32_t getWorkerThreadNum() const
+        {
+            return static_cast<uint32_t>(mWorkerThreads.size());
+        }
+
     private:
         std::vector<std::thread> mWorkerThreads;
 

@@ -13,7 +13,6 @@
 #include "Entity.hpp"
 #include "StackAny.hpp"
 
-//#include <any>
 #include <unordered_map>
 #include <queue>
 #include <cassert>
@@ -195,7 +194,6 @@ namespace ec2s
         {
             checkAndAddNewComponent<Args...>();
             return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
-
         }
 
         void dump()

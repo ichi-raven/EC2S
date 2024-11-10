@@ -1,4 +1,4 @@
-/*****************************************************************//**
+/*****************************************************************/ /**
  * @file   StackAny.hpp
  * @brief  header file of StackAny class
  *
@@ -15,133 +15,135 @@
 
 namespace ec2s
 {
-	template<size_t kMemSize>
-	class StackAny
-	{
-	private:
-		class IDestructor
-		{
-		public:
+    template <size_t kMemSize>
+    class StackAny
+    {
+    private:
+        class IDestructor
+        {
+        public:
+            virtual ~IDestructor()
+            {
+            }
 
-			virtual ~IDestructor()
-			{}
+            virtual void invoke(void* const p) = 0;
+        };
 
-			virtual void invoke(void* const p) = 0;
-		};
+        template <typename T>
+        class Destructor : public IDestructor
+        {
+        public:
+            virtual ~Destructor()
+            {
+            }
 
-		template<typename T>
-		class Destructor : public IDestructor
-		{
-		public:
+            virtual void invoke(void* const p) override
+            {
+                reinterpret_cast<T*>(p)->~T();
+            }
+        };
 
-			virtual ~Destructor()
-			{}
+    public:
+        StackAny()
+            : mpDestructor(nullptr)
+            , mTypeHash(0)
+            , mpMemory{}
+        {
+        }
 
-			virtual void invoke(void* const p) override
-			{
-				reinterpret_cast<T*>(p)->~T();
-			}
-		};
+        template <typename T>
+        StackAny(const T& from)
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+            new (mpMemory) T(from);
+            mpDestructor = new Destructor<T>();
+            mTypeHash    = TypeHasher::hash<T>();
+        }
 
-	public:
+        template <typename T>
+        StackAny(const T&& from)
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+            new (mpMemory) T(from);
+            mpDestructor = new Destructor<T>();
+            mTypeHash    = TypeHasher::hash<T>();
+        }
 
-		StackAny()
-			: mpDestructor(nullptr)
-			, mTypeHash(0)
-			, mpMemory {}
-		{
+        ~StackAny()
+        {
+            if (mpDestructor)
+            {
+                mpDestructor->invoke(mpMemory);
+                delete mpDestructor;
+            }
+        }
 
-		}
+        template <typename T>
+        T& operator=(const T& from)
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
 
-		template<typename T>
-		StackAny(const T& from)
-		{
-			static_assert(sizeof(T) <= kMemSize, "invalid type size!");
-			new(mpMemory) T(from);
-			mpDestructor = new Destructor<T>();
-			mTypeHash = TypeHasher::hash<T>();
-		}
+            if (mpDestructor)
+            {
+                mpDestructor->invoke(mpMemory);
+                delete mpDestructor;
+            }
 
-		template<typename T>
-		StackAny(const T&& from)
-		{
-			static_assert(sizeof(T) <= kMemSize, "invalid type size!");
-			new(mpMemory) T(from);
-			mpDestructor = new Destructor<T>();
-			mTypeHash = TypeHasher::hash<T>();
-		}
+            new (mpMemory) T(from);
+            mpDestructor = new Destructor<T>();
+            mTypeHash    = TypeHasher::hash<T>();
 
-		~StackAny()
-		{
-			if (mpDestructor)
-			{
-				mpDestructor->invoke(mpMemory);
-				delete mpDestructor;
-			}
-		}
+            return *(reinterpret_cast<T*>(mpMemory));
+        }
 
-		template<typename T>
-		T& operator=(const T& from)
-		{
-			static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+        template <typename T>
+        T& operator=(const T&& from)
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
 
-			if (mpDestructor)
-			{
-				mpDestructor->invoke(mpMemory);
-				delete mpDestructor;
-			}
+            if (mpDestructor)
+            {
+                mpDestructor->invoke(mpMemory);
+                delete mpDestructor;
+            }
 
-			new(mpMemory) T(from);
-			mpDestructor = new Destructor<T>();
-			mTypeHash = TypeHasher::hash<T>();
+            new (mpMemory) T(from);
+            mpDestructor = new Destructor<T>();
+            mTypeHash    = TypeHasher::hash<T>();
 
-			return *(reinterpret_cast<T*>(mpMemory));
-		}
+            return *(reinterpret_cast<T*>(mpMemory));
+        }
 
-		template<typename T>
-		T& operator=(const T&& from)
-		{
-			static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+        template <typename T>
+        T& get()
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
 
-			if (mpDestructor)
-			{
-				mpDestructor->invoke(mpMemory);
-				delete mpDestructor;
-			}
+            if (TypeHasher::hash<T>() != mTypeHash)
+            {
+                throw std::exception("invalid type cast (StackAny)!");
+            }
 
-			new(mpMemory) T(from);
-			mpDestructor = new Destructor<T>();
-			mTypeHash = TypeHasher::hash<T>();
+            return *(reinterpret_cast<T*>(mpMemory));
+        }
 
-			return *(reinterpret_cast<T*>(mpMemory));
-		}
+        void reset()
+        {
+            if (!mpDestructor)
+            {
+                return;
+            }
 
-		template<typename T>
-		T& get()
-		{
-			static_assert(sizeof(T) <= kMemSize, "invalid type size!");
-			assert(mTypeHash == TypeHasher::hash<T>() || !"invalid cast!");
+            mpDestructor->invoke(mpMemory);
+            delete mpDestructor;
+            mpDestructor = nullptr;
+        }
 
-			return *(reinterpret_cast<T*>(mpMemory));
-		}
-
-		void reset()
-		{
-			if (!mpDestructor)
-			{
-				return;
-			}
-
-			mpDestructor->invoke(mpMemory);
-			delete mpDestructor;
-			mpDestructor = nullptr;
-		}
-
-	private:
-		std::byte mpMemory[kMemSize];
-		IDestructor* mpDestructor;
-		std::size_t mTypeHash;
-	};
-}
+    private:
+        std::byte mpMemory[kMemSize];
+        IDestructor* mpDestructor;
+        std::size_t mTypeHash;
+    };
+}  // namespace ec2s
 
 #endif
