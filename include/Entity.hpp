@@ -22,6 +22,8 @@ namespace ec2s
 	constexpr Entity kEntitySlotMask  = std::numeric_limits<Entity>::max() << kEntitySlotShiftWidth;
 	//! Bit mask to get the index part for the value of Entity type
 	constexpr Entity kEntityIndexMask = ~kEntitySlotMask;	
+	//! Invalid entity ID
+    constexpr Entity kInvalidEntity = kEntitySlotMask | kEntityIndexMask;
 }
 
 #endif

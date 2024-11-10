@@ -58,7 +58,7 @@ namespace ec2s
             return rtn;
         }
 
-        void destroy(Entity entity)
+        void destroy(const Entity entity)
         {
             for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
             {
@@ -80,14 +80,13 @@ namespace ec2s
         }
 
         template<typename Component>
-        Component& get(Entity entity)
+        Component& get(const Entity entity)
         {
-            //return std::any_cast<SparseSet<Component>&>(mComponentArrayMap[TypeHasher::hash<Component>()])[entity];
             return mComponentArrayMap[TypeHasher::hash<Component>()].get<SparseSet<Component>>()[entity];
         }
 
         template<typename Component1, typename Component2, typename... OtherComponents>
-        std::tuple<Component1, Component2, OtherComponents...> get(Entity entity)
+        std::tuple<Component1, Component2, OtherComponents...> get(const Entity entity)
         {
             // TODO:
             assert(!"TODO");
@@ -96,7 +95,6 @@ namespace ec2s
         template<typename T>
         const std::vector<Entity>& getEntities()
         {
-            //return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).getDenseEntities();
             return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().getDenseEntities();
         }
 
@@ -108,7 +106,6 @@ namespace ec2s
         template<typename T>
         std::size_t size()
         {
-            //return std::any_cast<SparseSet<T>&>(mComponentArrayMap[TypeHasher::hash<T>()]).size();
             if (!mComponentArrayMap.contains(TypeHasher::hash<T>()))
             {
                 return 0;
@@ -116,10 +113,16 @@ namespace ec2s
             return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().size();
         }
 
-        template<typename T, typename... Args>
-        void add(Entity entity, Args... args)
+        template<typename T>
+        bool contains(const Entity entity)
         {
-#ifndef NDEBUG
+            return mComponentArrayMap.contains(TypeHasher::hash<T>()) && mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().contains(entity);
+        }
+
+        template<typename T, typename... Args>
+        void add(const Entity entity, Args... args)
+        {
+#ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
 #else
             constexpr TypeHash hash = TypeHasher::hash<T>();
@@ -129,17 +132,15 @@ namespace ec2s
             if (itr == mComponentArrayMap.end())
             {
                 itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
-                //mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<T>>(&itr->second));
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
-            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.emplace(entity, args...);
         }
 
         template<typename T>
-        void remove(Entity entity)
+        void remove(const Entity entity)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
             if (itr == mComponentArrayMap.end())
@@ -147,7 +148,6 @@ namespace ec2s
                 return;
             }
 
-            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.remove(entity);
         }
@@ -173,7 +173,7 @@ namespace ec2s
             {
                 return;
             }
-            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
+
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
         }
@@ -194,7 +194,6 @@ namespace ec2s
         View<Args...> view()
         {
             checkAndAddNewComponent<Args...>();
-            //return View<Args...>(std::any_cast<SparseSet<Args>&>(mComponentArrayMap[TypeHasher::hash<Args>()])...);
             return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
 
         }
@@ -202,10 +201,10 @@ namespace ec2s
         void dump()
         {
 #ifndef NDEBUG
-            for (const auto& pSS : mpComponentArrayPairs)
+            for (const auto& pSparseSet : mpComponentArrayPairs)
             {
-                std::cerr << "type hash : " << pSS.first << "\n";
-                pSS.second->dump();
+                std::cerr << "type hash : " << pSparseSet.first << "\n";
+                pSparseSet.second->dump();
                 std::cerr << "\n";
             }
 #endif
@@ -235,7 +234,6 @@ namespace ec2s
             if (!mComponentArrayMap.contains(hash))
             {
                 auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
-                //mpComponentArrayPairs.emplace_back(hash, std::any_cast<SparseSet<Head>>(&itr->second));
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
             }
 

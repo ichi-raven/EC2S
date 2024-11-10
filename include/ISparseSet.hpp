@@ -1,4 +1,4 @@
-/*****************************************************************//**
+/*****************************************************************/ /**
  * @file   ISparseSet.hpp
  * @brief  header file of ISparseSet class
  * 
@@ -22,14 +22,15 @@ namespace ec2s
     class ISparseSet
     {
     public:
-
         constexpr static std::size_t kTombstone = std::numeric_limits<std::uint32_t>::max();
 
         ISparseSet()
-        {}
+        {
+        }
 
         virtual ~ISparseSet()
-        {}
+        {
+        }
 
         void remove(const Entity entity)
         {
@@ -64,7 +65,21 @@ namespace ec2s
             this->clearPackedElement();
         }
 
-        std::size_t size() const 
+        bool contains(const Entity entity)
+        {
+            const auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+
+            if (index >= mSparseIndices.size())
+            {
+                return false;
+            }
+
+            const std::size_t sparseIndex = mSparseIndices[index];
+            
+            return sparseIndex != kTombstone && (mDenseEntities[sparseIndex] & kEntitySlotMask) == (entity & kEntitySlotMask);
+        }
+
+        std::size_t size() const
         {
             return mDenseEntities.size();
         }
@@ -82,25 +97,22 @@ namespace ec2s
         void dump()
         {
 #ifndef NDEBUG
-            std::cerr << "index dump (for debug) : \n";
+            std::cerr << "index dump : \n";
             std::cerr << "sparse : \n";
-            for (int i = 0; auto & e : mSparseIndices)
+            for (int i = 0; auto& e : mSparseIndices)
             {
                 std::cerr << i++ << " : " << e << "\n";
             }
 
             std::cerr << "dense : \n";
-            for (int i = 0; auto & e : mDenseEntities)
+            for (int i = 0; auto& e : mDenseEntities)
             {
                 std::cerr << i++ << " : " << static_cast<std::size_t>((e & kEntitySlotMask) >> kEntitySlotShiftWidth) << " | " << static_cast<std::size_t>((e & kEntityIndexMask)) << "\n";
             }
 #endif
         }
 
-        //constexpr virtual TypeHash getPackedTypeHash() const = 0;
-
     protected:
-
         virtual void removePackedElement(std::size_t index) = 0;
 
         virtual void clearPackedElement() = 0;
@@ -108,6 +120,6 @@ namespace ec2s
         std::vector<std::size_t> mSparseIndices;
         std::vector<Entity> mDenseEntities;
     };
-}
+}  // namespace ec2s
 
 #endif
