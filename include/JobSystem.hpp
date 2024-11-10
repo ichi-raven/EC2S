@@ -38,6 +38,25 @@ namespace ec2s
             assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
 
             mWorkerThreads.resize(workerThreadNum);
+
+            restart();
+        }
+
+        ~JobSystem()
+        {
+            if (!mStop)
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                if (!mStop)
+                {
+                    stop();
+                }
+            }
+        }
+
+        void restart()
+        {
+
             for (auto& thread : mWorkerThreads)
             {
                 thread = std::thread(
@@ -65,21 +84,11 @@ namespace ec2s
             }
         }
 
-        ~JobSystem()
-        {
-            if (!mStop)
-            {
-                std::lock_guard<std::mutex> lock(mMutex);
-                if (!mStop)
-                {
-                    stop();
-                }
-            }
-        }
-
         template <typename Func>
         JobHandle schedule(const Func f)
         {
+            assert(!mStop || !"This JobSystem is currently stopped!");
+
             {
                 std::lock_guard<std::mutex> lock(mMutex);
                 return &(mJobs.emplace(Job{ .task = f }));
@@ -89,6 +98,8 @@ namespace ec2s
         template <typename Func>
         JobHandle exec(const Func f)
         {
+            assert(!mStop || !"This JobSystem is currently stopped!");
+
             JobHandle handle;
             {
                 std::lock_guard<std::mutex> lock(mMutex);
@@ -101,6 +112,8 @@ namespace ec2s
 
         void exec()
         {
+            assert(!mStop || !"This JobSystem is currently stopped!");
+
             uint32_t jobNum = 0;
             {
                 std::lock_guard<std::mutex> lock(mMutex);
@@ -131,6 +144,12 @@ namespace ec2s
             {
                 thread.join();
             }
+        }
+
+        void join()
+        {
+            stop();
+            restart();
         }
 
         uint32_t getWorkerThreadNum() const

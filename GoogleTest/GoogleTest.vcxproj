@@ -98,6 +98,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="ApplicationTest.cpp" />
     <ClCompile Include="JobSystemTest.cpp" />
     <ClCompile Include="RegistryTest.cpp" />
   </ItemGroup>

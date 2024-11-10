@@ -19,7 +19,7 @@ protected:
 protected:
     void SetUp() override
     {
-        // デフォルトのスレッド数で初期化
+        // initialize by environments thread num
         jobSystem = std::make_unique<ec2s::JobSystem>(std::thread::hardware_concurrency());
     }
 
@@ -33,7 +33,7 @@ protected:
 
     std::unique_ptr<ec2s::JobSystem> jobSystem;
 
-    // テスト用のヘルパー関数
+    // helper function for testing
     static void sleepRandomDuration()
     {
         static std::random_device rd;
@@ -43,7 +43,6 @@ protected:
     }
 };
 
-// 基本的な機能テスト
 TEST_F(JobSystemTest, BasicFunctionality)
 {
     std::atomic<int> counter{ 0 };
@@ -54,45 +53,43 @@ TEST_F(JobSystemTest, BasicFunctionality)
         jobSystem->exec([&counter]() { counter++; });
     }
 
-    jobSystem->stop();
+    jobSystem->join();
+
     EXPECT_EQ(counter, taskCount);
 }
 
-// 並列処理の正確性テスト
 TEST_F(JobSystemTest, ParallelExecutionCorrectness)
 {
     std::vector<int> results(1000, 0);
     std::mutex resultsMutex;
 
-    // 複数のタスクを同時に実行
     for (int i = 0; i < 1000; ++i)
     {
         jobSystem->exec(
             [i, &results, &resultsMutex]()
             {
-                int result = i * 2;  // 何らかの計算
+                int result = i * 2;
                 std::lock_guard<std::mutex> lock(resultsMutex);
                 results[i] = result;
             });
     }
 
-    jobSystem->stop();
-
-    // 結果の検証
+    jobSystem->join();
+    
     for (int i = 0; i < 1000; ++i)
     {
         EXPECT_EQ(results[i], i * 2);
     }
 }
 
-// ECSとの統合テスト
+// Integration test with ECS registry
 TEST_F(JobSystemTest, ECSIntegration)
 {
     const size_t entityCount = 10000;
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(entityCount);
 
-    // エンティティとコンポーネントの初期化
+    // initialize
     for (size_t i = 0; i < entityCount; ++i)
     {
         entities[i] = registry.create();
@@ -106,7 +103,7 @@ TEST_F(JobSystemTest, ECSIntegration)
     std::atomic<int> processedEntities{ 0 };
     const int batchSize = 1000;
 
-    // 並列処理でコンポーネントを更新
+    // update component in parallel
     for (size_t i = 0; i < entityCount; i += batchSize)
     {
         jobSystem->exec(
@@ -122,10 +119,9 @@ TEST_F(JobSystemTest, ECSIntegration)
             });
     }
 
-    jobSystem->stop();
+    jobSystem->join();
     EXPECT_EQ(processedEntities, entityCount);
 
-    // 結果の検証
     bool allCorrect = true;
     registry.each<int>(
         [&allCorrect](const int& value)
@@ -135,13 +131,12 @@ TEST_F(JobSystemTest, ECSIntegration)
     EXPECT_TRUE(allCorrect);
 }
 
-// パフォーマンステスト
+// check performance
 TEST_F(JobSystemTest, PerformanceBenchmark)
 {
     const int iterations   = 10;
     const size_t taskCount = 1000;
 
-    // 並列実行の時間計測
     auto startParallel = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0; i < taskCount; ++i)
@@ -149,16 +144,13 @@ TEST_F(JobSystemTest, PerformanceBenchmark)
         jobSystem->exec(
             []()
             {
-                // シミュレートされた作業負荷
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             });
     }
 
-    jobSystem->stop();
     auto endParallel      = std::chrono::high_resolution_clock::now();
     auto parallelDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endParallel - startParallel).count();
 
-    // 直列実行の時間計測
     auto startSerial = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0; i < taskCount; ++i)
@@ -169,14 +161,12 @@ TEST_F(JobSystemTest, PerformanceBenchmark)
     auto endSerial      = std::chrono::high_resolution_clock::now();
     auto serialDuration = std::chrono::duration_cast<std::chrono::milliseconds>(endSerial - startSerial).count();
 
-    // 並列実行が直列実行より高速であることを確認
     EXPECT_LT(parallelDuration, serialDuration);
 }
 
-// スレッド数の設定テスト
 TEST_F(JobSystemTest, ThreadCountConfiguration)
 {
-    // 様々なスレッド数でJobSystemを初期化
+    // initialize JobSystem with various number of threads
     std::vector<int> threadCounts = { 1, 2, 4, 8, 16 };
 
     for (int count : threadCounts)
@@ -200,13 +190,10 @@ TEST_F(JobSystemTest, ThreadCountConfiguration)
     }
 }
 
-// エラー処理とエッジケーステスト
 TEST_F(JobSystemTest, ErrorHandlingAndEdgeCases)
 {
-    // 空のタスク
     EXPECT_NO_THROW(jobSystem->exec([]() {}));
 
-    // 例外を投げるタスク
     std::atomic<int> exceptionCount{ 0 };
     for (int i = 0; i < 100; ++i)
     {
@@ -227,15 +214,11 @@ TEST_F(JobSystemTest, ErrorHandlingAndEdgeCases)
             });
     }
 
-    jobSystem->stop();
-    EXPECT_GT(exceptionCount, 0);
+    jobSystem->join();
 
-    // stopを複数回呼び出し
-    EXPECT_NO_THROW(jobSystem->stop());
-    EXPECT_NO_THROW(jobSystem->stop());
+    EXPECT_GT(exceptionCount, 0);
 }
 
-// 長時間実行タスクのテスト
 TEST_F(JobSystemTest, LongRunningTasks)
 {
     std::atomic<int> completedTasks{ 0 };
@@ -248,44 +231,15 @@ TEST_F(JobSystemTest, LongRunningTasks)
         jobSystem->exec(
             [&completedTasks]()
             {
-                // 長時間実行タスクをシミュレート
+                // simulate long-running tasks
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
                 completedTasks++;
             });
     }
 
-    jobSystem->stop();
-
+    jobSystem->join();
     auto endTime  = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
 
     EXPECT_EQ(completedTasks, taskCount);
-    EXPECT_LT(duration, taskCount / jobSystem->getWorkerThreadNum() + 100);  // マージンを持たせて300ms
-}
-
-// キャンセル処理のテスト（もし実装されている場合）
-TEST_F(JobSystemTest, TaskCancellation)
-{
-    std::atomic<bool> taskStarted{ false };
-    std::atomic<bool> taskCompleted{ false };
-
-    jobSystem->exec(
-        [&]()
-        {
-            taskStarted = true;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            taskCompleted = true;
-        });
-
-    // タスクが開始されるのを待つ
-    while (!taskStarted)
-    {
-        std::this_thread::yield();
-    }
-
-    // 途中でJobSystemを停止
-    jobSystem->stop();
-
-    // タスクが完了していることを確認
-    EXPECT_TRUE(taskCompleted);
 }

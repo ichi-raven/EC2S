@@ -49,14 +49,14 @@ struct TestCompC
     char value;
 };
 
-class EC2STest : public ::testing::Test
+class RegistryTest : public ::testing::Test
 {
 protected:
     ec2s::Registry registry;
 };
 
 // Entity Creation and Destruction Tests
-TEST_F(EC2STest, EntityCreationAndDestruction)
+TEST_F(RegistryTest, EntityCreationAndDestruction)
 {
     // Basic creation
     auto entity = registry.create();
@@ -85,7 +85,7 @@ TEST_F(EC2STest, EntityCreationAndDestruction)
 }
 
 // Component Management Tests
-TEST_F(EC2STest, ComponentManagement)
+TEST_F(RegistryTest, ComponentManagement)
 {
     auto entity = registry.create();
 
@@ -107,7 +107,7 @@ TEST_F(EC2STest, ComponentManagement)
 }
 
 // View Tests
-TEST_F(EC2STest, ViewOperations)
+TEST_F(RegistryTest, ViewOperations)
 {
     const size_t entityCount = 100;
     std::vector<ec2s::Entity> entities;
@@ -147,7 +147,7 @@ TEST_F(EC2STest, ViewOperations)
 }
 
 // Edge Cases Tests
-TEST_F(EC2STest, EdgeCases)
+TEST_F(RegistryTest, EdgeCases)
 {
     auto entity = registry.create();
 
@@ -167,7 +167,7 @@ TEST_F(EC2STest, EdgeCases)
 }
 
 // Performance Tests
-TEST_F(EC2STest, Performance)
+TEST_F(RegistryTest, Performance)
 {
     constexpr size_t entityCount = 100000;
     std::vector<ec2s::Entity> entities;
@@ -197,7 +197,7 @@ TEST_F(EC2STest, Performance)
 }
 
 // Component Deletion Tests
-TEST_F(EC2STest, ComponentDeletion)
+TEST_F(RegistryTest, ComponentDeletion)
 {
     auto entity = registry.create();
 

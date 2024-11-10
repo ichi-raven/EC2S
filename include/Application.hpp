@@ -29,6 +29,15 @@ public:                                                                         
                                                                                                                              \
 private:
 
+#define GEN_STATE_CTOR_ONLY(STATE_TYPE, KEY_TYPE, COMMONREGION_TYPE)                                                         \
+public:                                                                                                                      \
+    STATE_TYPE(ec2s::Application<KEY_TYPE, COMMONREGION_TYPE>* application, std::shared_ptr<COMMONREGION_TYPE> commonRegion) \
+        : State(application, commonRegion)                                                                                   \
+    {                                                                                                                        \
+    }                                                                                                                        \
+                                                                                                                             \
+private:
+
 namespace ec2s
 {
 
@@ -85,7 +94,6 @@ namespace ec2s
         {
             return mpCommonRegion;
         }
-
 
         const std::shared_ptr<CommonRegion_t>& common() const
         {
@@ -172,7 +180,7 @@ namespace ec2s
 
         void changeState(const Key_t& dstStateKey, const bool cachePrevState = false)
         {
-            assert(mStatesFactory.find(dstStateKey) != mStatesFactory.end());
+            assert(mStatesFactory.find(dstStateKey) != mStatesFactory.end() || !"invalid change dst state!");
 
             if (cachePrevState)
             {
