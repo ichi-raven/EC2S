@@ -110,6 +110,7 @@ namespace ec2s
         Application()
             : mpCommonRegion(std::make_shared<CommonRegion_t>())
             , mEndFlag(false)
+            , mChangedFlag(false)
         {
         }
 
@@ -128,14 +129,19 @@ namespace ec2s
             mFirstStateKey = firstStateKey;
             mEndFlag       = false;
 
-            assert(mFirstStateKey);
-
             mCurrent.first  = mFirstStateKey.value();
             mCurrent.second = mStatesFactory[mFirstStateKey.value()]();
+            mCurrent.second->initAll();
         }
 
         void update()
         {
+            if (mChangedFlag)
+            {
+                mCurrent.second->initAll();
+                mChangedFlag = false;
+            }
+
             mCurrent.second->updateAll();
         }
 
@@ -155,8 +161,6 @@ namespace ec2s
                                    [&]()
                                    {
                                        auto&& m = std::make_shared<InheritedState>(this, mpCommonRegion);
-                                       m->initAll();
-
                                        return m;
                                    });
 
@@ -185,6 +189,8 @@ namespace ec2s
                 mCurrent.first  = dstStateKey;
                 mCurrent.second = mStatesFactory[dstStateKey]();
             }
+
+            mChangedFlag = true;
         }
 
         void dispatchEnd()
@@ -206,6 +212,7 @@ namespace ec2s
         std::optional<std::pair<Key_t, State_t>> mCache;
         std::optional<Key_t> mFirstStateKey;
         bool mEndFlag;
+        bool mChangedFlag;
     };
 
 };  // namespace ec2s
