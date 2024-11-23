@@ -1,4 +1,4 @@
-/*****************************************************************//**
+/*****************************************************************/ /**
  * @file   Registry.hpp
  * @brief  header file of Registry class
  * 
@@ -18,23 +18,41 @@
 #include <cassert>
 
 #ifndef NDEBUG
-#include <iostream>
+#include <sstream>
 #endif
 
 namespace ec2s
 {
+    /**
+     * @brief  class that ties all components to Entity and executes System
+     */
     class Registry
     {
     public:
-
+        /** 
+         * @brief  constructor
+         *  
+         */
         Registry()
             : mNextEntity(0)
-        {}
+        {
+        }
 
+        /** 
+         * @brief  destructor
+         *  
+         */
         ~Registry()
-        {}
+        {
+        }
 
-        template<typename... Args>
+        /** 
+         * @brief create new entity
+         * 
+         * @tparam Args component types owned by the Entity to be created
+         * @return created Entity
+         */
+        template <typename... Args>
         Entity create()
         {
             Entity rtn = 0;
@@ -57,6 +75,11 @@ namespace ec2s
             return rtn;
         }
 
+        /** 
+         * @brief  destroy specified Entity
+         *  
+         * @param entity Entity to be destroyed
+         */
         void destroy(const Entity entity)
         {
             for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
@@ -67,6 +90,10 @@ namespace ec2s
             mFreedEntities.emplace(static_cast<Entity>(entity | (1ull << kEntitySlotShiftWidth)));
         }
 
+        /** 
+         * @brief  clear all entities
+         *  
+         */
         void clear()
         {
             for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
@@ -78,31 +105,46 @@ namespace ec2s
             std::swap(mFreedEntities, empty);
         }
 
-        template<typename Component>
+        /** 
+         * @brief  obtains the reference of specified Component of the specified Entity
+         *  
+         * @param entity Entity to get Component
+         * @return ntity to get Component
+         */
+        template <typename Component>
         Component& get(const Entity entity)
         {
             return mComponentArrayMap[TypeHasher::hash<Component>()].get<SparseSet<Component>>()[entity];
         }
 
-        template<typename Component1, typename Component2, typename... OtherComponents>
-        std::tuple<Component1, Component2, OtherComponents...> get(const Entity entity)
-        {
-            // TODO:
-            assert(!"TODO");
-        }
-
-        template<typename T>
+        /** 
+         * @brief  obtains all Entities with the specified Component
+         *  
+         * @return 
+         */
+        template <typename T>
         const std::vector<Entity>& getEntities()
         {
             return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().getDenseEntities();
         }
 
+        /** 
+         * @brief  get the number of Entities currently active (created and not destroyed)
+         *  
+         * @return the number of Entities currently active
+         */
         std::size_t activeEntityNum() const
         {
             return static_cast<std::size_t>(mNextEntity) - mFreedEntities.size();
         }
 
-        template<typename T>
+        /** 
+         * @brief  returns the size(num) of the specified Component
+         *  
+         * @tparam T component type
+         * @return the size(num) of the specified Component
+         */
+        template <typename T>
         std::size_t size()
         {
             if (!mComponentArrayMap.contains(TypeHasher::hash<T>()))
@@ -112,13 +154,27 @@ namespace ec2s
             return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().size();
         }
 
-        template<typename T>
+        /** 
+         * @brief  checks if the specified Entity has been included
+         *  
+         * @param entity entity to be checked 
+         * @return whether the entity has been included
+         */
+        template <typename T>
         bool contains(const Entity entity)
         {
             return mComponentArrayMap.contains(TypeHasher::hash<T>()) && mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().contains(entity);
         }
 
-        template<typename T, typename... Args>
+        /** 
+         * @brief  add the specified Component to the specified Entity
+         *  
+         * @tparam T component type
+         * @tparam Args types of arguments forwarded to the Component constructor
+         * @param entity Entity to add Component
+         * @param ...args arguments forwarded to the Component constructor
+         */
+        template <typename T, typename... Args>
         void add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
@@ -138,7 +194,13 @@ namespace ec2s
             ss.emplace(entity, args...);
         }
 
-        template<typename T>
+        /** 
+         * @brief  removes a component of a specified type from a specified Entity
+         *  
+         * @tparam T component type
+         * @param entity Entity to remove Component
+         */
+        template <typename T>
         void remove(const Entity entity)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
@@ -151,20 +213,15 @@ namespace ec2s
             ss.remove(entity);
         }
 
-        template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr >
-        void each(Func func)
-        {
-            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
-            if (itr == mComponentArrayMap.end())
-            {
-                return;
-            }
-            //auto& ss = std::any_cast<SparseSet<T>&>(itr->second);
-            auto& ss = itr->second.get<SparseSet<T>>();
-            ss.each(func);
-        }
-
-        template<typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr >
+        /** 
+         * @brief  execute the specified function on all components of the specified type (system in ECS)
+         *  
+         * @tparam T component type
+         * @tparam Func function type
+         * @tparam IsEligibleEachFunc Trait to determine if the Func type is correctly callable for the specified Component type
+         * @param func system function
+         */
+        template <typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr>
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
@@ -177,39 +234,90 @@ namespace ec2s
             ss.each(func);
         }
 
-        template<typename T, typename Func, typename std::enable_if_t<!std::is_invocable_v<Func, T&> && !std::is_invocable_v<Func, Entity, T&>>>
+        /** 
+         * @brief  system that takes Entity as its first argument
+         *  
+         * @tparam Func function type
+         * @tparam IsEligibleEachFunc Trait to determine if the Func type and Entity is correctly callable for the specified Component type
+         * @param func system function
+         */
+        template <typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr>
+        void each(Func func)
+        {
+            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
+
+            auto& ss = itr->second.get<SparseSet<T>>();
+            ss.each(func);
+        }
+
+        /** 
+         * @brief  called when an illegal Func type is passed to each()
+         *  
+         * @param func
+         */
+        template <typename T, typename Func, typename std::enable_if_t<!std::is_invocable_v<Func, T&> && !std::is_invocable_v<Func, Entity, T&>>>
         void each(Func func)
         {
             static_assert(std::is_invocable_v<Func, T&> || std::is_invocable_v<Func, Entity, T&>, "ineligible Func type!");
         }
 
-        template<typename Component1, typename Component2, typename... OtherComponents, typename Func>
+        /** 
+         * @brief   Simultaneous each for multiple Component types 
+         * @detail  create View internally
+         * 
+         * @param func system function
+         */
+        template <typename Component1, typename Component2, typename... OtherComponents, typename Func>
         void each(Func func)
         {
             view<Component1, Component2, OtherComponents...>().each(func);
         }
 
-        template<typename... Args>
+        /** 
+         * @brief  create a View from specified component types
+         *  
+         * @tparam Args component types
+         * @return created View
+         */
+        template <typename... Args>
         View<Args...> view()
         {
             checkAndAddNewComponent<Args...>();
             return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
         }
 
-        void dump()
+        /** 
+         * @brief  dump whole SparseSets internals
+         * @return dumped result string
+         */
+        std::string dump()
         {
 #ifndef NDEBUG
+            std::ostringstream oss;
+
             for (const auto& pSparseSet : mpComponentArrayPairs)
             {
-                std::cerr << "type hash : " << pSparseSet.first << "\n";
-                pSparseSet.second->dump();
-                std::cerr << "\n";
+                oss << "type hash : " << pSparseSet.first << "\n";
+                oss << pSparseSet.second->dump();
+                oss << "\n";
             }
+
+            return oss.str();
 #endif
+            return "";
         }
 
     private:
-        template<typename Head, typename... Tail>
+        /** 
+         * @brief internal implementation for expanding template arguments of create() 
+         *  
+         * @param entity
+         */
+        template <typename Head, typename... Tail>
         void createImpl(Entity entity)
         {
             add<Head>(entity);
@@ -220,10 +328,14 @@ namespace ec2s
             }
         }
 
-        template<typename Head, typename... Tail>
+        /** 
+         * @brief  check if there is a SparseSet of the specified Component type and if not, add it
+         *  
+         */
+        template <typename Head, typename... Tail>
         void checkAndAddNewComponent()
         {
-#ifndef NDEBUG
+#ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<Head>();
 #else
             constexpr TypeHash hash = TypeHasher::hash<Head>();
@@ -241,15 +353,18 @@ namespace ec2s
             }
         }
 
-
+        //! Entity to be created next
         Entity mNextEntity;
+        //! destroyed Entity
         std::queue<Entity> mFreedEntities;
 
+        //! Dummy type for calculating the size of SparseSet (meaningless)
         using Dummy_t = std::uint32_t;
-
+        //! maps a SparseSet for each Component type to the type hash of the Component type
         std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
+        //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };
-}
+}  // namespace ec2s
 
 #endif

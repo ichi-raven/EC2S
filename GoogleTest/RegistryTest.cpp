@@ -9,7 +9,7 @@
 #include <gtest/gtest.h>
 #include "../include/EC2S.hpp"
 
-// Component structures for testing
+// component structures for testing
 struct TestCompA
 {
     TestCompA()
@@ -55,18 +55,18 @@ protected:
     ec2s::Registry registry;
 };
 
-// Entity Creation and Destruction Tests
+// entity creation and destruction Tests
 TEST_F(RegistryTest, EntityCreationAndDestruction)
 {
-    // Basic creation
+    // basic creation
     auto entity = registry.create();
     EXPECT_GT(registry.activeEntityNum(), 0);
 
-    // Destruction
+    // destruction
     registry.destroy(entity);
     EXPECT_EQ(registry.activeEntityNum(), 0);
 
-    // Multiple entities
+    // multiple entities
     std::vector<ec2s::Entity> entities;
     const size_t entityCount = 1000;
 
@@ -76,7 +76,7 @@ TEST_F(RegistryTest, EntityCreationAndDestruction)
     }
     EXPECT_EQ(registry.activeEntityNum(), entityCount);
 
-    // Destroy all
+    // destroy all
     for (auto e : entities)
     {
         registry.destroy(e);
@@ -84,35 +84,35 @@ TEST_F(RegistryTest, EntityCreationAndDestruction)
     EXPECT_EQ(registry.activeEntityNum(), 0);
 }
 
-// Component Management Tests
+// component management tests
 TEST_F(RegistryTest, ComponentManagement)
 {
     auto entity = registry.create();
 
-    // Add components
+    // add components
     registry.add<TestCompA>(entity, 42);
     registry.add<TestCompB>(entity, 3.14);
 
-    // Check component values
+    // check component values
     EXPECT_EQ(registry.get<TestCompA>(entity).value, 42);
     EXPECT_EQ(registry.get<TestCompB>(entity).value, 3.14);
 
-    // Check component counts
+    // check component counts
     EXPECT_EQ(registry.size<TestCompA>(), 1);
     EXPECT_EQ(registry.size<TestCompB>(), 1);
 
-    // Modify component
+    // modify component
     registry.get<TestCompA>(entity).value = 100;
     EXPECT_EQ(registry.get<TestCompA>(entity).value, 100);
 }
 
-// View Tests
+// View tests
 TEST_F(RegistryTest, ViewOperations)
 {
     const size_t entityCount = 100;
     std::vector<ec2s::Entity> entities;
 
-    // Create entities with different component combinations
+    // create entities with different component combinations
     for (size_t i = 0; i < entityCount; ++i)
     {
         auto entity = registry.create();
@@ -130,49 +130,49 @@ TEST_F(RegistryTest, ViewOperations)
         }
     }
 
-    // Test view of single component
+    // test view of single component
     {
         size_t count = 0;
         registry.each<TestCompA>([&count](const TestCompA& a) { count++; });
         EXPECT_EQ(count, entityCount);
     }
 
-    // Test view of two components
+    // test view of two components
     {
         size_t count = 0;
         auto view    = registry.view<TestCompA, TestCompB>();
         view.each([&count](const TestCompA& a, const TestCompB& b) { count++; });
-        EXPECT_EQ(count, entityCount / 2);  // Only entities with both A and B
+        EXPECT_EQ(count, entityCount / 2);  // only entities with both A and B
     }
 }
 
-// Edge Cases Tests
+// edge cases Tests
 TEST_F(RegistryTest, EdgeCases)
 {
     auto entity = registry.create();
 
-    // Double component addition
+    // double component addition
     registry.add<TestCompA>(entity, 1);
     EXPECT_NO_THROW(registry.add<TestCompA>(entity, 2));
 
-    // Get non-existent component
+    // get non-existent component
     EXPECT_ANY_THROW(registry.get<TestCompB>(entity));
 
-    // Destroy non-existent entity
+    // destroy non-existent entity
     ec2s::Entity invalidEntity = static_cast<ec2s::Entity>(-1);
     EXPECT_NO_THROW(registry.destroy(invalidEntity));
     
-    // Empty view operations (untestable due to C++ macro specifications)
+    // empty view operations (untestable due to C++ macro specifications)
     //EXPECT_ANY_THROW(registry.view<TestCompB, TestCompC>());
 }
 
-// Performance Tests
+// performance tests
 TEST_F(RegistryTest, Performance)
 {
     constexpr size_t entityCount = 100000;
     std::vector<ec2s::Entity> entities;
 
-    // Measure creation time
+    // measure creation time
     auto startCreate = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < entityCount; ++i)
     {
@@ -186,17 +186,17 @@ TEST_F(RegistryTest, Performance)
     }
     auto endCreate  = std::chrono::high_resolution_clock::now();
     auto createTime = std::chrono::duration_cast<std::chrono::milliseconds>(endCreate - startCreate).count();
-    EXPECT_LT(createTime, 1000);  // Should complete within 1 second
+    EXPECT_LT(createTime, 1000);  // should complete within 1 second (WARN: adhoc)
 
-    // Measure iteration time
+    // measure iteration time
     auto startIter = std::chrono::high_resolution_clock::now();
     registry.each<TestCompA>([](TestCompA& a) { a.value += 1; });
     auto endIter  = std::chrono::high_resolution_clock::now();
     auto iterTime = std::chrono::duration_cast<std::chrono::milliseconds>(endIter - startIter).count();
-    EXPECT_LT(iterTime, 100);  // Should complete within 100ms
+    EXPECT_LT(iterTime, 100);  // should complete within 100ms (WARN: adhoc)
 }
 
-// Component Deletion Tests
+// component deletion tests
 TEST_F(RegistryTest, ComponentDeletion)
 {
     auto entity = registry.create();
@@ -209,7 +209,7 @@ TEST_F(RegistryTest, ComponentDeletion)
     EXPECT_EQ(registry.size<TestCompB>(), 1);
     EXPECT_EQ(registry.size<TestCompC>(), 1);
 
-    // Delete individual components
+    // delete individual components
     registry.remove<TestCompB>(entity);
     EXPECT_EQ(registry.size<TestCompB>(), 0);
 }

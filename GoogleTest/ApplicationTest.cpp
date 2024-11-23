@@ -1,14 +1,14 @@
 #include <gtest/gtest.h>
 #include "../include/Application.hpp"
 
-// Common region class for testing
+// common region class for testing
 class TestCommonRegion
 {
 public:
     int value = 0;
 };
 
-// Enum representing test states
+// enum representing test states
 enum class TestState
 {
     Initial,
@@ -17,7 +17,7 @@ enum class TestState
     Final
 };
 
-// Test state classes
+// test state classes
 class InitialState : public ec2s::State<TestState, TestCommonRegion>
 {
     GEN_STATE_CTOR_ONLY(InitialState, TestState, TestCommonRegion);
@@ -94,7 +94,7 @@ public:
     }
 };
 
-// Test fixture for state machine tests
+// test fixture for state machine tests
 class StateMachineTest : public ::testing::Test
 {
 protected:
@@ -109,52 +109,52 @@ protected:
     ec2s::Application<TestState, TestCommonRegion> app;
 };
 
-// Test basic state transitions
+// test basic state transitions
 TEST_F(StateMachineTest, BasicStateTransition)
 {
     app.init(TestState::Initial);
-    EXPECT_EQ(app.mpCommonRegion->value, 1);  // Check Initial state initialization
+    EXPECT_EQ(app.mpCommonRegion->value, 1);  // check Initial state initialization
 
     app.update(); 
     EXPECT_EQ(app.mpCommonRegion->value, 1);
-    // Initial -> State1
+    // initial -> state1
     app.update();  
     EXPECT_EQ(app.mpCommonRegion->value, 2);
-    // State1 -> State2
+    // state1 -> state2
     app.update(); 
     EXPECT_EQ(app.mpCommonRegion->value, 3);
-    // State2 -> Final
+    // state2 -> final
     app.update();  
-    // Final -> Exit
+    // final -> exit
     EXPECT_TRUE(app.endAll());
 }
 
-// Test state caching functionality
+// test state caching functionality
 TEST_F(StateMachineTest, StateCaching)
 {
     app.init(TestState::Initial);
     EXPECT_EQ(app.mpCommonRegion->value, 1);
 
-    // Transition to State1 with caching enabled
+    // transition to State1 with caching enabled
     app.changeState(TestState::State1, true);
     app.update();
     EXPECT_EQ(app.mpCommonRegion->value, 2);
 
-    // Transition to State2
+    // transition to State2
     app.changeState(TestState::State2);
     app.update();
     EXPECT_EQ(app.mpCommonRegion->value, 3);
 
-    // Return to cached State1
+    // return to cached State1
     app.changeState(TestState::State1);
     app.update();
     EXPECT_EQ(app.mpCommonRegion->value, 2);
 }
 
-// Test adding duplicate states
+// test adding duplicate states
 TEST_F(StateMachineTest, DuplicateStateAddition)
 {
-    // Try to add an already existing state
+    // try to add an already existing state
 #ifndef NDEBUG
     EXPECT_DEATH(app.addState<InitialState>(TestState::Initial), "");
 #else
@@ -162,16 +162,16 @@ TEST_F(StateMachineTest, DuplicateStateAddition)
 #endif
 }
 
-// Test invalid state transitions
+// test invalid state transitions
 TEST_F(StateMachineTest, InvalidStateTransition)
 {
     app.init(TestState::Initial);
 
-    // Test transition to non-existent state
+    // test transition to non-existent state
     EXPECT_DEATH(app.changeState(static_cast<TestState>(999)), "");
 }
 
-// Test state reset functionality
+// test state reset functionality
 class ResetTestState : public ec2s::State<TestState, TestCommonRegion>
 {
     GEN_STATE_CTOR_ONLY(ResetTestState, TestState, TestCommonRegion);
@@ -191,12 +191,12 @@ public:
     }
 };
 
-// Test application exit functionality
+// test application exit functionality
 TEST_F(StateMachineTest, ApplicationExit)
 {
     app.init(TestState::Initial);
 
-    // Run through all states until Final
+    // run through all states until Final
     while (!app.endAll())
     {
         app.update();
@@ -205,7 +205,7 @@ TEST_F(StateMachineTest, ApplicationExit)
     EXPECT_TRUE(app.endAll());
 }
 
-// Test common region accessibility
+// test common region accessibility
 TEST_F(StateMachineTest, CommonRegionAccess)
 {
     app.init(TestState::Initial);

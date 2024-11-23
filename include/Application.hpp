@@ -1,3 +1,12 @@
+/*****************************************************************//**
+ * @file   Application.hpp
+ * @brief  header file of Application class
+ * 
+ * @author ichi-raven
+ * @date   November 2024
+ *********************************************************************/
+
+//! forward declaration
 namespace ec2s
 {
     template <typename Key, typename CommonRegion>
@@ -17,6 +26,9 @@ namespace ec2s
 #include <string>
 #include <unordered_map>
 
+/**
+ * @brief  constructor, destructor, init, update auto-generated macros for State class
+ */
 #define GEN_STATE(STATE_TYPE, KEY_TYPE, COMMONREGION_TYPE)                                                                   \
 public:                                                                                                                      \
     STATE_TYPE(ec2s::Application<KEY_TYPE, COMMONREGION_TYPE>* application, std::shared_ptr<COMMONREGION_TYPE> commonRegion) \
@@ -29,6 +41,9 @@ public:                                                                         
                                                                                                                              \
 private:
 
+/**
+ * @brief  constructor only auto-generated macros for State class
+ */
 #define GEN_STATE_CTOR_ONLY(STATE_TYPE, KEY_TYPE, COMMONREGION_TYPE)                                                         \
 public:                                                                                                                      \
     STATE_TYPE(ec2s::Application<KEY_TYPE, COMMONREGION_TYPE>* application, std::shared_ptr<COMMONREGION_TYPE> commonRegion) \
@@ -40,7 +55,11 @@ private:
 
 namespace ec2s
 {
-
+    /**
+     * @brief  represents a state in a state machine (also called a scene)
+     * @tparam Key_t type of State key (identifies the State)
+     * @tparam CommonRegion_t type of region shared by all States in the Application
+     */
     template <typename Key_t, typename CommonRegion_t>
     class State
     {
@@ -48,8 +67,15 @@ namespace ec2s
         using Application_t = Application<Key_t, CommonRegion_t>;
 
     public:
+
         State() = delete;
 
+        /** 
+         * @brief  constructor (should normally be generated automatically by the macro GEN_STATE)
+         *  
+         * @param pApplication pointer to Application instance
+         * @param pCommonRegion pointer to CommonRegion of Application
+         */
         State(Application_t* pApplication, std::shared_ptr<CommonRegion_t> pCommonRegion)
             : mpApplication(pApplication)
             , mpCommonRegion(pCommonRegion)
@@ -57,56 +83,89 @@ namespace ec2s
         {
         }
 
+        /**
+         * @brief  destructor
+         */
         virtual ~State(){};
 
+        /** 
+         * @brief  State initialization function (automatically called by Application)
+         *  
+         */
         virtual void init() = 0;
 
+        /** 
+         * @brief  State update function (automatically called by Application)
+         *  
+         */
         virtual void update() = 0;
 
-        inline void initAll()
-        {
-            init();
-        }
-
-        void updateAll()
-        {
-            update();
-        }
-
     protected:
+
+        /** 
+         * @brief  transition to the specified State
+         *  
+         * @param dstStateKey key of the destination State
+         * @param cachePrevState whether the current state of the state should be retained (e.g., pause screen, etc.)
+         */
         void changeState(const Key_t& dstStateKey, bool cachePrevState = false)
         {
             mStateChanged = true;
             mpApplication->changeState(dstStateKey, cachePrevState);
         }
 
+        /** 
+         * @brief  reset the current State state
+         *  
+         */
         void resetState()
         {
-            initAll();
+            init();
         }
 
+        /** 
+         * @brief  terminate the entire Application
+         *  
+         */
         void exitApplication()
         {
             mpApplication->dispatchEnd();
         }
 
+        /** 
+         * @brief  get CommonRegion reference
+         *  
+         * @return reference to shared_ptr<CommonRegion>
+         */
         const std::shared_ptr<CommonRegion_t>& getCommonRegion() const
         {
             return mpCommonRegion;
         }
 
+        /** 
+         * @brief  get CommonRegion reference (shortened version)
+         *  
+         * @return reference to shared_ptr<CommonRegion>
+         */
         const std::shared_ptr<CommonRegion_t>& common() const
         {
             return mpCommonRegion;
         }
 
     private:
+        //! shared pointer to CommonRegion
         std::shared_ptr<CommonRegion_t> mpCommonRegion;
+        //! pointer to application
         Application_t* mpApplication;
-
+        //! flag indicating that a State change has occurred
         bool mStateChanged;
     };
 
+    /**
+     * @brief  representing the entire application, where State is registered and used
+     * @tparam Key_t type of State key (identifies the State)
+     * @tparam CommonRegion_t type of region shared by all States in the Application
+     */
     template <typename Key_t, typename CommonRegion_t>
     class Application
     {
@@ -115,6 +174,10 @@ namespace ec2s
         using Factory_t = std::function<State_t()>;
 
     public:
+        /** 
+         * @brief  constructor
+         *  
+         */
         Application()
             : mpCommonRegion(std::make_shared<CommonRegion_t>())
             , mEndFlag(false)
@@ -128,10 +191,19 @@ namespace ec2s
         Application(Application&&)                 = delete;
         Application& operator=(Application&&)      = delete;
 
+        /** 
+         * @brief  destructor
+         *  
+         */
         ~Application()
         {
         }
 
+        /** 
+         * @brief  initialize Application and set it to start from the specified State
+         *  
+         * @param firstStateKey start with this State
+         */
         void init(const Key_t& firstStateKey)
         {
             mFirstStateKey = firstStateKey;
@@ -139,20 +211,30 @@ namespace ec2s
 
             mCurrent.first  = mFirstStateKey.value();
             mCurrent.second = mStatesFactory[mFirstStateKey.value()]();
-            mCurrent.second->initAll();
+            mCurrent.second->init();
         }
 
+        /** 
+         * @brief  update the entire Application (called in the main loop)
+         *  
+         */
         void update()
         {
             if (mChangedFlag)
             {
-                mCurrent.second->initAll();
+                mCurrent.second->init();
                 mChangedFlag = false;
             }
 
-            mCurrent.second->updateAll();
+            mCurrent.second->update();
         }
 
+        /** 
+         * @brief  Add a State (can be transitioned from another State)
+         * 
+         * @tparam InheritedState type of State to add
+         * @param key key of State to add
+         */
         template <typename InheritedState>
         void addState(const Key_t& key)
         {
@@ -178,6 +260,12 @@ namespace ec2s
             }
         }
 
+        /** 
+         * @brief  changes the current State to the specified State (usually called from the State side)
+         *  
+         * @param dstStateKey key of the destination state
+         * @param cachePrevState whether the current state of the state should be retained (e.g., pause screen, etc.)
+         */
         void changeState(const Key_t& dstStateKey, const bool cachePrevState = false)
         {
             assert(mStatesFactory.find(dstStateKey) != mStatesFactory.end() || !"invalid change dst state!");
@@ -201,25 +289,41 @@ namespace ec2s
             mChangedFlag = true;
         }
 
+        /** 
+         * @brief  notify the end of the Application (turn on the end flag)
+         *  
+         */
         void dispatchEnd()
         {
             mEndFlag = true;
         }
 
+        /** 
+         * @brief  judges whether the Application is terminated (used to determine the end of the main loop)
+         *  
+         * @return whether the Application is ended
+         */
         bool endAll()
         {
             return mEndFlag;
         }
 
     public:
+        //! CommonRegion
         std::shared_ptr<CommonRegion_t> mpCommonRegion;
 
     private:
+        //! hashmap with State's key and its instance's factory
         std::unordered_map<Key_t, Factory_t> mStatesFactory;
+        //! key/instance pairs for the current State
         std::pair<Key_t, State_t> mCurrent;
+        //! cache of previous State (used if the cachePrevState flag was on)
         std::optional<std::pair<Key_t, State_t>> mCache;
+        //! key for the starting State
         std::optional<Key_t> mFirstStateKey;
+        //! flag indicating whether the Application should be terminated
         bool mEndFlag;
+        //! flag indicating whether a State transition has occurred
         bool mChangedFlag;
     };
 

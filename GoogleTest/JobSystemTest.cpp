@@ -82,7 +82,7 @@ TEST_F(JobSystemTest, ParallelExecutionCorrectness)
     }
 }
 
-// Integration test with ECS registry
+// integration test with ECS registry
 TEST_F(JobSystemTest, ECSIntegration)
 {
     const size_t entityCount = 10000;

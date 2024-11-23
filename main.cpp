@@ -44,8 +44,6 @@ void heavyTask()
 
 int main()
 {
-    //test();
-
     ec2s::JobSystem jobSystem(4);
     ec2s::Registry registry;
 
@@ -53,17 +51,17 @@ int main()
 
     const auto task = [&]()
     {
-        //{
-        //    std::unique_lock lock(mut);
-        //    std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
-        //}
+        {
+            std::unique_lock lock(mut);
+            std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
+        }
 
         heavyTask();
 
-        //{
-        //    std::unique_lock lock(mut);
-        //    std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
-        //}
+        {
+            std::unique_lock lock(mut);
+            std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
+        }
     };
 
     std::chrono::high_resolution_clock::time_point start, end;
