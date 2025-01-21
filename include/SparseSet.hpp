@@ -28,7 +28,7 @@ namespace ec2s
         {}
 
         template<typename... Args>
-        void emplace(Entity entity, Args... args)
+        T& emplace(Entity entity, Args... args)
         {
             auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
 
@@ -39,7 +39,8 @@ namespace ec2s
 
             mSparseIndices[index] = mPacked.size();
             mDenseEntities.emplace_back(entity);
-            mPacked.emplace_back(args...);
+
+            return mPacked.emplace_back(args...);
         }
 
         void reserve(const std::size_t reserveSize)

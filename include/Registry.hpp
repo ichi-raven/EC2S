@@ -119,7 +119,7 @@ namespace ec2s
         }
 
         template<typename T, typename... Args>
-        void add(const Entity entity, Args... args)
+        T& add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
@@ -135,7 +135,8 @@ namespace ec2s
             }
 
             auto& ss = itr->second.get<SparseSet<T>>();
-            ss.emplace(entity, args...);
+
+            return ss.emplace(entity, args...);
         }
 
         template<typename T>

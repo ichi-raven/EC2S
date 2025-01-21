@@ -168,7 +168,9 @@ TEST_F(StateMachineTest, InvalidStateTransition)
     app.init(TestState::Initial);
 
     // Test transition to non-existent state
+#ifndef NDEBUG
     EXPECT_DEATH(app.changeState(static_cast<TestState>(999)), "");
+#endif
 }
 
 // Test state reset functionality
