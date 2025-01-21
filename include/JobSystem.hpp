@@ -19,19 +19,31 @@
 
 namespace ec2s
 {
-
+    /**
+     * @brief  job system for parallel execution of specified job(task)
+     */
     class JobSystem
     {
     private:
+        /**
+         * @brief  internal representation of Job
+         */
         struct Job
         {
+            //! function actually executed
             std::function<void()> task;
         };
 
     public:
+        //! Job handle expression
         using JobHandle = Job*;
 
     public:
+        /** 
+         * @brief  constructor
+         *  
+         * @param workerThreadNum number of tasks to be executed in parallel
+         */
         JobSystem(const uint32_t workerThreadNum)
             : mStop(false)
         {
@@ -42,8 +54,13 @@ namespace ec2s
             restart();
         }
 
+        /** 
+         * @brief  destructor(stop all worker threads)
+         *  
+         */
         ~JobSystem()
         {
+            // double check
             if (!mStop)
             {
                 std::lock_guard<std::mutex> lock(mMutex);
@@ -54,6 +71,10 @@ namespace ec2s
             }
         }
 
+        /** 
+         * @brief  restart the stopped JobSystem (all worker threads)
+         *  
+         */
         void restart()
         {
 
@@ -84,21 +105,40 @@ namespace ec2s
             }
         }
 
+        /** 
+         * @brief  register the specified function as a job
+         *  
+         * @tparam Func type of specified function
+         * @param f specified function
+         * @return registered job's handle
+         */
         template <typename Func>
         JobHandle schedule(const Func f)
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
-
+            if (!mStop)
             {
                 std::lock_guard<std::mutex> lock(mMutex);
                 return &(mJobs.emplace(Job{ .task = f }));
             }
         }
 
+        /** 
+         * @brief  immediately executes the specified function as a job in a worker thread
+         *  
+         * @tparam Func type of specified function
+         * @param f specified function
+         * @return executing job's handle
+         */
         template <typename Func>
         JobHandle exec(const Func f)
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
+
+            if (mStop)
+            {
+                return nullptr;
+            }
 
             JobHandle handle;
             {
@@ -110,6 +150,10 @@ namespace ec2s
             return handle;
         }
 
+        /** 
+         * @brief  execute all currently registered jobs
+         *  
+         */
         void exec()
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
@@ -131,6 +175,10 @@ namespace ec2s
             }
         }
 
+        /** 
+         * @brief  stop all worker threads
+         *  
+         */
         void stop()
         {
             {
@@ -146,25 +194,38 @@ namespace ec2s
             }
         }
 
+        /** 
+         * @brief  join all worker threads once and restart them
+         *  
+         */
         void join()
         {
             stop();
             restart();
         }
 
+        /** 
+         * @brief  get the current number of worker threads
+         *  
+         * @return current number of worker threads
+         */
         uint32_t getWorkerThreadNum() const
         {
             return static_cast<uint32_t>(mWorkerThreads.size());
         }
 
     private:
+        //! worker threads
         std::vector<std::thread> mWorkerThreads;
-
+        //! condition variable to control all worker threads 
         std::condition_variable mConditionVariable;
 
         // async-------------
+        //! mutex for all worker threads
         std::mutex mMutex;
+        //! jobs queue
         std::queue<Job> mJobs;
+        //! flag indicating whether the system is stopped
         bool mStop;
         // ------------------
     };
