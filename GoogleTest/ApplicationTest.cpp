@@ -167,12 +167,8 @@ TEST_F(StateMachineTest, InvalidStateTransition)
 {
     app.init(TestState::Initial);
 
-<<<<<<< HEAD
     // Test transition to non-existent state
 #ifndef NDEBUG
-=======
-    // test transition to non-existent state
->>>>>>> cafd6d87a1ff979eda4e9f1913c5d696bbaad856
     EXPECT_DEATH(app.changeState(static_cast<TestState>(999)), "");
 #endif
 }

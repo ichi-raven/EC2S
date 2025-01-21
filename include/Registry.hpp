@@ -175,7 +175,7 @@ namespace ec2s
          * @param ...args arguments forwarded to the Component constructor
          */
         template <typename T, typename... Args>
-        void add(const Entity entity, Args... args)
+        T& add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
