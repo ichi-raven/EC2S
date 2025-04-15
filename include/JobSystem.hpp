@@ -9,6 +9,7 @@
 #ifndef EC2S_INCLUDE_JOBSYSTEM_HPP_
 #define EC2S_INCLUDE_JOBSYSTEM_HPP_
 
+#include <coroutine>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
@@ -19,21 +20,58 @@
 
 namespace ec2s
 {
+    struct JobPromise
+    {
+        Job get_return_object()
+        {
+            return Job{};
+        }
+        std::suspend_never initial_suspend()
+        {
+            return {};
+        }
+        std::suspend_always final_suspend() noexcept
+        {
+            return {};
+        }
+        void return_void()
+        {
+        }
+        void unhandled_exception()
+        {
+        }
+    };
+
+    /**
+     * @brief  internal representation of Job
+     */
+    struct Job : std::coroutine_handle<JobPromise>
+    {
+        using promise_type = JobPromise;
+
+        bool await_ready() const noexcept
+        {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<> h)
+        {
+            continuation = h;
+        }
+
+        void await_resume()
+        {
+        }
+
+        std::coroutine_handle<> continuation;
+    };
+
     /**
      * @brief  job system for parallel execution of specified job(task)
      */
     class JobSystem
     {
     private:
-        /**
-         * @brief  internal representation of Job
-         */
-        struct Job
-        {
-            //! function actually executed
-            std::function<void()> task;
-        };
-
     public:
         //! Job handle expression
         using JobHandle = Job*;
@@ -42,14 +80,18 @@ namespace ec2s
         /** 
          * @brief  constructor
          *  
-         * @param workerThreadNum number of tasks to be executed in parallel
+         * @param workerThreadNum number of tasks to be executed in parallel (default: -1, use all hardware threads)
          */
-        JobSystem(const uint32_t workerThreadNum)
+        JobSystem(std::optional<size_t> workerThreadNum = std::nullopt)
             : mStop(false)
         {
-            assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
+            if (!workerThreadNum)
+            {
+                workerThreadNum = static_cast<int>(std::thread::hardware_concurrency());
+            }
 
-            mWorkerThreads.resize(workerThreadNum);
+            assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
+            mWorkerThreads.resize(static_cast<size_t>(workerThreadNum.value()));
 
             restart();
         }
@@ -77,7 +119,6 @@ namespace ec2s
          */
         void restart()
         {
-
             for (auto& thread : mWorkerThreads)
             {
                 thread = std::thread(
@@ -85,7 +126,7 @@ namespace ec2s
                     {
                         while (true)
                         {
-                            Job job;
+                            std::coroutine_handle<> job;
                             {
                                 std::unique_lock<std::mutex> lock(mMutex);
                                 mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
@@ -99,7 +140,7 @@ namespace ec2s
                                 mJobs.pop();
                             }
 
-                            job.task();
+                            job.resume();
                         }
                     });
             }
@@ -108,46 +149,15 @@ namespace ec2s
         /** 
          * @brief  register the specified function as a job
          *  
-         * @tparam Func type of specified function
-         * @param f specified function
-         * @return registered job's handle
          */
-        template <typename Func>
-        JobHandle schedule(const Func f)
+        JobHandle schedule(const Job& job)
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
             if (!mStop)
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                return &(mJobs.emplace(Job{ .task = f }));
+                mJobs.emplace(job);
             }
-        }
-
-        /** 
-         * @brief  immediately executes the specified function as a job in a worker thread
-         *  
-         * @tparam Func type of specified function
-         * @param f specified function
-         * @return executing job's handle
-         */
-        template <typename Func>
-        JobHandle exec(const Func f)
-        {
-            assert(!mStop || !"This JobSystem is currently stopped!");
-
-            if (mStop)
-            {
-                return nullptr;
-            }
-
-            JobHandle handle;
-            {
-                std::lock_guard<std::mutex> lock(mMutex);
-                handle = &(mJobs.emplace(Job{ .task = f }));
-            }
-
-            mConditionVariable.notify_one();
-            return handle;
         }
 
         /** 
@@ -217,14 +227,14 @@ namespace ec2s
     private:
         //! worker threads
         std::vector<std::thread> mWorkerThreads;
-        //! condition variable to control all worker threads 
+        //! condition variable to control all worker threads
         std::condition_variable mConditionVariable;
 
         // async-------------
         //! mutex for all worker threads
         std::mutex mMutex;
         //! jobs queue
-        std::queue<Job> mJobs;
+        std::queue<std::coroutine_handle<>> mJobs;
         //! flag indicating whether the system is stopped
         bool mStop;
         // ------------------

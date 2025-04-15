@@ -1,6 +1,7 @@
 #include "include/EC2S.hpp"
 
 #include <iostream>
+#include <chrono>
 
 void test();
 
@@ -49,7 +50,7 @@ int main()
 
     std::mutex mut;
 
-    const auto task = [&]()
+    const auto task = [&]() -> ec2s::Job
     {
         {
             std::unique_lock lock(mut);
@@ -62,6 +63,8 @@ int main()
             std::unique_lock lock(mut);
             std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
         }
+
+        co_return;
     };
 
     std::chrono::high_resolution_clock::time_point start, end;
@@ -71,8 +74,10 @@ int main()
         start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < 100; ++i)
         {
-            jobSystem.exec(task);
+            jobSystem.schedule(task());
         }
+
+        jobSystem.exec();
 
         jobSystem.stop();
         end = std::chrono::high_resolution_clock::now();
