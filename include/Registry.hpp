@@ -18,6 +18,8 @@
 #include <cassert>
 
 #ifndef NDEBUG
+#include <string>
+#include <iostream>
 #include <sstream>
 #endif
 
@@ -288,6 +290,12 @@ namespace ec2s
         {
             checkAndAddNewComponent<Args...>();
             return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
+        }
+
+        template<typename T>
+        SparseSet<T>& getSparseSet()
+        {
+            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>();
         }
 
         /** 

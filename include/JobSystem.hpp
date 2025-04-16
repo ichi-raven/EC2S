@@ -20,50 +20,182 @@
 
 namespace ec2s
 {
-    struct JobPromise
-    {
-        Job get_return_object()
-        {
-            return Job{};
-        }
-        std::suspend_never initial_suspend()
-        {
-            return {};
-        }
-        std::suspend_always final_suspend() noexcept
-        {
-            return {};
-        }
-        void return_void()
-        {
-        }
-        void unhandled_exception()
-        {
-        }
-    };
 
     /**
      * @brief  internal representation of Job
      */
-    struct Job : std::coroutine_handle<JobPromise>
+    struct Job
     {
-        using promise_type = JobPromise;
-
-        bool await_ready() const noexcept
+        enum class Priority : uint8_t
         {
-            return false;
+            eUrgent = 0,
+            eHigh   = 1,
+            eNormal = 2,
+            eLow    = 3,
+        };
+
+        struct promise_type;
+
+        using HandleType = std::coroutine_handle<promise_type>;
+
+        /*struct Awaiter
+        {
+            constexpr bool await_ready() const noexcept
+            {
+                return false;
+            }
+
+            constexpr void await_suspend(HandleType h) const noexcept
+            {
+                if (h.promise().continuation)
+                {
+                    h.promise().continuation.resume();
+                }
+            }
+
+            constexpr void await_resume() const noexcept
+            {
+            }
+        };*/
+
+        struct promise_type
+        {
+            auto get_return_object()
+            {
+                return Job{ std::coroutine_handle<promise_type>::from_promise(*this) };
+            }
+
+            std::suspend_always initial_suspend()
+            {
+                return std::suspend_always{};
+            }
+
+            std::suspend_always final_suspend() noexcept
+            {
+                return std::suspend_always{};
+            }
+
+            void return_void()
+            {
+            }
+
+            void unhandled_exception()
+            {
+                std::terminate();
+            }
+
+            void set_continuation(std::coroutine_handle<> h)
+            {
+                continuation = h;
+            }
+
+            std::coroutine_handle<> continuation;
+        };
+
+        Job(HandleType h, Priority p = Priority::eNormal)
+            : coro(h)
+            , priority(p)
+        {
         }
 
-        void await_suspend(std::coroutine_handle<> h)
+        Job(const Job&)            = delete;
+        Job& operator=(const Job&) = delete;
+
+        Job(Job&& other) noexcept
+            : coro(other.coro)
+            , priority(other.priority)
         {
-            continuation = h;
+            other.coro = nullptr;
         }
 
-        void await_resume()
+        Job& operator=(Job&& other) noexcept
+        {
+            this->coro     = other.coro;
+            this->priority = other.priority;
+            other.coro     = nullptr;
+
+            return *this;
+        }
+
+        Job(const Job&& other) noexcept
+            : coro(other.coro)
+            , priority(other.priority)
         {
         }
 
-        std::coroutine_handle<> continuation;
+        Job& operator=(const Job&& other) noexcept
+        {
+            this->coro     = other.coro;
+            this->priority = other.priority;
+
+            return *this;
+        }
+
+        void resume()
+        {
+            if (coro && !coro.done())
+            {
+                coro.resume();
+            }
+        }
+
+        bool done() const
+        {
+            return coro.done();
+        }
+
+        // AwaiterÇï‘Ç∑
+        auto operator co_await()
+        {
+            struct Awaiter
+            {
+                HandleType coro;
+
+                bool await_ready() const noexcept
+                {
+                    return coro.done();
+                }
+
+                void await_suspend(std::coroutine_handle<> awaiting)
+                {
+                    coro.promise().set_continuation(awaiting);
+                    coro.resume();  // ë±çs
+                }
+
+                void await_resume() const noexcept
+                {
+                }
+            };
+
+            return Awaiter{ coro };
+        }
+
+        std::suspend_always initial_suspend()
+        {
+            return {};
+        }
+
+        std::suspend_always final_suspend() noexcept
+        {
+            return {};
+        }
+
+        void return_void()
+        {
+        }
+
+        void unhandled_exception()
+        {
+            std::terminate();
+        }
+
+        bool operator<(const Job& another) const
+        {
+            return static_cast<std::underlying_type_t<Priority>>(this->priority) < static_cast<std::underlying_type_t<Priority>>(another.priority);
+        }
+
+        HandleType coro;
+        Priority priority;
     };
 
     /**
@@ -71,11 +203,6 @@ namespace ec2s
      */
     class JobSystem
     {
-    private:
-    public:
-        //! Job handle expression
-        using JobHandle = Job*;
-
     public:
         /** 
          * @brief  constructor
@@ -121,28 +248,7 @@ namespace ec2s
         {
             for (auto& thread : mWorkerThreads)
             {
-                thread = std::thread(
-                    [this]()
-                    {
-                        while (true)
-                        {
-                            std::coroutine_handle<> job;
-                            {
-                                std::unique_lock<std::mutex> lock(mMutex);
-                                mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
-
-                                if (mStop && mJobs.empty())
-                                {
-                                    return;
-                                }
-
-                                job = std::move(mJobs.front());
-                                mJobs.pop();
-                            }
-
-                            job.resume();
-                        }
-                    });
+                thread = std::thread([this]() { workerLoop(); });
             }
         }
 
@@ -150,39 +256,16 @@ namespace ec2s
          * @brief  register the specified function as a job
          *  
          */
-        JobHandle schedule(const Job& job)
+        void schedule(Job&& job)
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
             if (!mStop)
             {
                 std::lock_guard<std::mutex> lock(mMutex);
-                mJobs.emplace(job);
-            }
-        }
-
-        /** 
-         * @brief  execute all currently registered jobs
-         *  
-         */
-        void exec()
-        {
-            assert(!mStop || !"This JobSystem is currently stopped!");
-
-            uint32_t jobNum = 0;
-            {
-                std::lock_guard<std::mutex> lock(mMutex);
-                jobNum = static_cast<uint32_t>(mJobs.size());
+                mJobs.emplace(std::move(job));
             }
 
-            mConditionVariable.notify_all();
-
-            if (jobNum > mWorkerThreads.size())
-            {
-                for (int i = 0; i < jobNum - mWorkerThreads.size(); ++i)
-                {
-                    mConditionVariable.notify_one();
-                }
-            }
+            mConditionVariable.notify_one();
         }
 
         /** 
@@ -225,6 +308,33 @@ namespace ec2s
         }
 
     private:
+        void workerLoop()
+        {
+            std::optional<Job> job;
+
+            while (true)
+            {
+                // exclusive lock (wait job)
+                {
+                    std::unique_lock<std::mutex> lock(mMutex);
+                    mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
+
+                    if (mStop && mJobs.empty())
+                    {
+                        return;
+                    }
+
+                    job = std::move(mJobs.top());
+                    mJobs.pop();
+                }
+                if (job)
+                {
+                    job->resume();
+                }
+            }
+        }
+
+    private:
         //! worker threads
         std::vector<std::thread> mWorkerThreads;
         //! condition variable to control all worker threads
@@ -234,7 +344,7 @@ namespace ec2s
         //! mutex for all worker threads
         std::mutex mMutex;
         //! jobs queue
-        std::queue<std::coroutine_handle<>> mJobs;
+        std::priority_queue<Job> mJobs;
         //! flag indicating whether the system is stopped
         bool mStop;
         // ------------------

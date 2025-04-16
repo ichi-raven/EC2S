@@ -17,6 +17,8 @@
 #include "TypeHash.hpp"
 #include "Entity.hpp"
 
+#include <string>
+
 namespace ec2s
 {
     /**
