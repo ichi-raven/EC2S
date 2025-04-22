@@ -17,6 +17,9 @@
 #include <queue>
 #include <functional>
 #include <cassert>
+#include <future>
+
+#include <iostream>
 
 namespace ec2s
 {
@@ -38,58 +41,39 @@ namespace ec2s
 
         using HandleType = std::coroutine_handle<promise_type>;
 
-        /*struct Awaiter
-        {
-            constexpr bool await_ready() const noexcept
-            {
-                return false;
-            }
-
-            constexpr void await_suspend(HandleType h) const noexcept
-            {
-                if (h.promise().continuation)
-                {
-                    h.promise().continuation.resume();
-                }
-            }
-
-            constexpr void await_resume() const noexcept
-            {
-            }
-        };*/
-
         struct promise_type
         {
             auto get_return_object()
             {
+                std::cout << "get_return_object" << "\n";
                 return Job{ std::coroutine_handle<promise_type>::from_promise(*this) };
             }
 
             std::suspend_always initial_suspend()
             {
+                std::cout << "initial_suspend" << "\n";
+
                 return std::suspend_always{};
             }
 
             std::suspend_always final_suspend() noexcept
             {
+                std::cout << "final_suspend" << "\n";
+
                 return std::suspend_always{};
             }
 
             void return_void()
             {
+                std::cout << "return_void" << "\n";
             }
 
             void unhandled_exception()
             {
+                std::cout << "unhandled_exception" << "\n";
+
                 std::terminate();
             }
-
-            void set_continuation(std::coroutine_handle<> h)
-            {
-                continuation = h;
-            }
-
-            std::coroutine_handle<> continuation;
         };
 
         Job(HandleType h, Priority p = Priority::eNormal)
@@ -133,14 +117,18 @@ namespace ec2s
 
         void resume()
         {
+            std::cout << "check resume" << "\n";
+
             if (coro && !coro.done())
             {
+                std::cout << "resume" << "\n";
                 coro.resume();
             }
         }
 
         bool done() const
         {
+            std::cout << "check done" << "\n";
             return coro.done();
         }
 
@@ -153,40 +141,23 @@ namespace ec2s
 
                 bool await_ready() const noexcept
                 {
-                    return coro.done();
+                    std::cout << "await_ready" << "\n";
+                    return false;
                 }
 
-                void await_suspend(std::coroutine_handle<> awaiting)
+                void await_suspend(HandleType awaiting) const noexcept
                 {
-                    coro.promise().set_continuation(awaiting);
-                    coro.resume();  // ë±çs
+                    std::cout << "await_suspend" << "\n";
+                    auto& promise = awaiting.promise();
                 }
 
                 void await_resume() const noexcept
                 {
+                    std::cout << "await_resume" << "\n";
                 }
             };
 
             return Awaiter{ coro };
-        }
-
-        std::suspend_always initial_suspend()
-        {
-            return {};
-        }
-
-        std::suspend_always final_suspend() noexcept
-        {
-            return {};
-        }
-
-        void return_void()
-        {
-        }
-
-        void unhandled_exception()
-        {
-            std::terminate();
         }
 
         bool operator<(const Job& another) const
@@ -214,11 +185,11 @@ namespace ec2s
         {
             if (!workerThreadNum)
             {
-                workerThreadNum = static_cast<int>(std::thread::hardware_concurrency());
+                workerThreadNum = std::max(1u, std::thread::hardware_concurrency() - 1);
             }
 
             assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
-            mWorkerThreads.resize(static_cast<size_t>(workerThreadNum.value()));
+            mWorkerThreads.resize(workerThreadNum.value());
 
             restart();
         }
@@ -246,6 +217,16 @@ namespace ec2s
          */
         void restart()
         {
+            if (!mStop)
+            {
+                stop();
+            }
+
+            {
+                std::lock_guard<std::mutex> lock(mMutex);
+                mStop = false;
+            }
+
             for (auto& thread : mWorkerThreads)
             {
                 thread = std::thread([this]() { workerLoop(); });
@@ -256,7 +237,7 @@ namespace ec2s
          * @brief  register the specified function as a job
          *  
          */
-        void schedule(Job&& job)
+        void submit(Job&& job)
         {
             assert(!mStop || !"This JobSystem is currently stopped!");
             if (!mStop)
@@ -283,7 +264,10 @@ namespace ec2s
 
             for (auto& thread : mWorkerThreads)
             {
-                thread.join();
+                if (thread.joinable())
+                {
+                    thread.join();
+                }
             }
         }
 
@@ -327,9 +311,14 @@ namespace ec2s
                     job = std::move(mJobs.top());
                     mJobs.pop();
                 }
+
+                // execute job
                 if (job)
                 {
-                    job->resume();
+                    while (!job->done())
+                    {
+                        job->resume();
+                    }
                 }
             }
         }

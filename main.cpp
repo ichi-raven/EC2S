@@ -47,12 +47,12 @@ int main()
 {
     constexpr int kTestNum = 1000;
 
-    ec2s::JobSystem jobSystem;
+    ec2s::JobSystem jobSystem(1);
     ec2s::Registry registry;
 
     std::mutex mut;
 
-    const auto beforeTask = [&](int idx) -> ec2s::Job
+    const auto beforeTask = [&](std::vector<int>& test) -> ec2s::Job
     {
 #ifndef NDEBUG
         {
@@ -61,20 +61,20 @@ int main()
         }
 #endif
 
-        heavyTask();
+        //heavyTask();
+        test.emplace_back(1);
 
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
             std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
-            std::cout << "task " << idx << " finished\n";
         }
 #endif
 
         co_return;
     };
 
-    const auto task = [&](int idx) -> ec2s::Job
+    const auto task = [&](std::vector<int>& test) -> ec2s::Job
     {
 #ifndef NDEBUG
         {
@@ -82,14 +82,14 @@ int main()
             std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
         }
 #endif
-        heavyTask();
-        co_await beforeTask(idx);
-        heavyTask();
+        //heavyTask();
+        co_await beforeTask(test);
+        test.emplace_back(2);
+        //heavyTask();
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
             std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
-            std::cout << "task " << idx << " finished\n";
         }
 #endif
 
@@ -101,12 +101,22 @@ int main()
     // parallel
     {
         start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < kTestNum; ++i)
-        {
-            jobSystem.schedule(task(i));
-        }
+        //for (int i = 0; i < kTestNum; ++i)
+        //{
+        //    jobSystem.schedule(task(i));
+        //}
 
+        std::vector<int> test;
+        jobSystem.submit(task(test));
         jobSystem.stop();
+
+        std::cout << test.size() << "\n";
+
+        if (test[0] != 1 || test[1] != 2)
+        {
+            std::cout << "invalid!!!\n";
+            return 1;
+        }
         end = std::chrono::high_resolution_clock::now();
 
         const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
@@ -115,16 +125,16 @@ int main()
     std::cout << "\n\n";
 
     // serial
-    {
-        start = std::chrono::high_resolution_clock::now();
-        for (int i = 0; i < kTestNum; ++i)
-        {
-            task(i).resume();
-        }
-        end                = std::chrono::high_resolution_clock::now();
-        const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-        std::cout << "serial : " << elapsed << "[ms]\n";
-    }
+    //{
+    //    start = std::chrono::high_resolution_clock::now();
+    //    for (int i = 0; i < kTestNum; ++i)
+    //    {
+    //        task(i).resume();
+    //    }
+    //    end                = std::chrono::high_resolution_clock::now();
+    //    const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
+    //    std::cout << "serial : " << elapsed << "[ms]\n";
+    //}
 
     return 0;
 }
