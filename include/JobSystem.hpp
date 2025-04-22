@@ -23,12 +23,106 @@
 
 namespace ec2s
 {
+    struct JobSystem;
+    struct JobList;
+
+    struct JobPromise
+    {
+        friend class JobSystem;
+        friend class SuspendJob;
+        friend class FinalizeJob;
+
+        Job get_return_object()
+        {
+            std::cout << "get_return_object" << "\n";
+            return Job::from_promise(*this);
+        }
+
+        std::suspend_always initial_suspend()
+        {
+            std::cout << "initial_suspend" << "\n";
+
+            return std::suspend_always{};
+        }
+
+        std::suspend_always final_suspend() noexcept
+        {
+            std::cout << "final_suspend" << "\n";
+
+            return std::suspend_always{};
+        }
+
+        void return_void()
+        {
+            std::cout << "return_void" << "\n";
+        }
+
+        void unhandled_exception()
+        {
+            std::cout << "unhandled_exception" << "\n";
+
+            std::terminate();
+        }
+
+    private:
+        JobSystem* pJobSystem = nullptr;
+        JobList* pJobList     = nullptr;
+    };
+
+    struct SuspendJob
+    {
+
+        constexpr bool await_ready() const noexcept
+        {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<JobPromise> handle) noexcept
+        {
+            std::cout << "await_suspend" << "\n";
+            auto& promise = handle.promise();
+
+            auto& jobList = *promise.pJobList;
+
+            jobList.add(promise.get_return_object());
+
+            
+
+            {
+                // --- Eager Workers ---
+                //
+                // Eagerly try to fetch & execute the next task from the front of the
+                // scheduler queue -
+                // We do this so that multiple threads can share the
+                // scheduling workload.
+                //
+                // But we can also disable that, so that there is only one thread
+                // that does the scheduling, and removing elements from the
+                // queue.
+
+                coroutine_handle_t c = task_list->pop_task();
+
+                if (c)
+                {
+                    assert(!c.done() && "task must not be done");
+                    c();
+                }
+            }
+        }
+
+        void await_resume() noexcept
+        {
+            std::cout << "await_resume" << "\n";
+        }
+    };
 
     /**
      * @brief  internal representation of Job
      */
-    struct Job
+    struct Job : std::coroutine_handle<JobPromise>
     {
+        friend class JobSystem;
+
         enum class Priority : uint8_t
         {
             eUrgent = 0,
@@ -37,47 +131,12 @@ namespace ec2s
             eLow    = 3,
         };
 
-        struct promise_type;
+        using promise_type = ::JobPromise;
 
         using HandleType = std::coroutine_handle<promise_type>;
 
-        struct promise_type
-        {
-            auto get_return_object()
-            {
-                std::cout << "get_return_object" << "\n";
-                return Job{ std::coroutine_handle<promise_type>::from_promise(*this) };
-            }
-
-            std::suspend_always initial_suspend()
-            {
-                std::cout << "initial_suspend" << "\n";
-
-                return std::suspend_always{};
-            }
-
-            std::suspend_always final_suspend() noexcept
-            {
-                std::cout << "final_suspend" << "\n";
-
-                return std::suspend_always{};
-            }
-
-            void return_void()
-            {
-                std::cout << "return_void" << "\n";
-            }
-
-            void unhandled_exception()
-            {
-                std::cout << "unhandled_exception" << "\n";
-
-                std::terminate();
-            }
-        };
-
         Job(HandleType h, Priority p = Priority::eNormal)
-            : coro(h)
+            : handle(h)
             , priority(p)
         {
         }
@@ -86,30 +145,30 @@ namespace ec2s
         Job& operator=(const Job&) = delete;
 
         Job(Job&& other) noexcept
-            : coro(other.coro)
+            : handle(other.handle)
             , priority(other.priority)
         {
-            other.coro = nullptr;
+            other.handle = nullptr;
         }
 
         Job& operator=(Job&& other) noexcept
         {
-            this->coro     = other.coro;
+            this->handle   = other.handle;
             this->priority = other.priority;
-            other.coro     = nullptr;
+            other.handle   = nullptr;
 
             return *this;
         }
 
         Job(const Job&& other) noexcept
-            : coro(other.coro)
+            : handle(other.handle)
             , priority(other.priority)
         {
         }
 
         Job& operator=(const Job&& other) noexcept
         {
-            this->coro     = other.coro;
+            this->handle   = other.handle;
             this->priority = other.priority;
 
             return *this;
@@ -119,45 +178,17 @@ namespace ec2s
         {
             std::cout << "check resume" << "\n";
 
-            if (coro && !coro.done())
+            if (handle && !handle.done())
             {
                 std::cout << "resume" << "\n";
-                coro.resume();
+                handle.resume();
             }
         }
 
         bool done() const
         {
             std::cout << "check done" << "\n";
-            return coro.done();
-        }
-
-        // Awaiter‚ð•Ô‚·
-        auto operator co_await()
-        {
-            struct Awaiter
-            {
-                HandleType coro;
-
-                bool await_ready() const noexcept
-                {
-                    std::cout << "await_ready" << "\n";
-                    return false;
-                }
-
-                void await_suspend(HandleType awaiting) const noexcept
-                {
-                    std::cout << "await_suspend" << "\n";
-                    auto& promise = awaiting.promise();
-                }
-
-                void await_resume() const noexcept
-                {
-                    std::cout << "await_resume" << "\n";
-                }
-            };
-
-            return Awaiter{ coro };
+            return handle.done();
         }
 
         bool operator<(const Job& another) const
@@ -165,8 +196,48 @@ namespace ec2s
             return static_cast<std::underlying_type_t<Priority>>(this->priority) < static_cast<std::underlying_type_t<Priority>>(another.priority);
         }
 
-        HandleType coro;
+        HandleType handle;
         Priority priority;
+    };
+
+    class JobList
+    {
+    public:
+        JobList() = default;
+        JobList(Job&& job)
+        {
+            mJobs.emplace_back(std::move(job));
+        }
+
+        JobList(const JobList&)            = delete;
+        JobList& operator=(const JobList&) = delete;
+        JobList(JobList&&)                 = default;
+        JobList& operator=(JobList&&)      = default;
+        ~JobList()
+        {
+            for (auto& job : mJobs)
+            {
+                if (job.handle)
+                {
+                    job.handle.destroy();
+                }
+            }
+        }
+
+        void add(Job&& job)
+        {
+            mJobs.emplace_back(std::move(job));
+        }
+
+        inline std::size_t getJobCount()
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            return mJobs.size();
+        }
+
+    private:
+        std::mutex mMutex;
+        std::vector<Job> mJobs;
     };
 
     /**
