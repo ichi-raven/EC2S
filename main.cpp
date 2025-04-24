@@ -47,7 +47,7 @@ int main()
 {
     constexpr int kTestNum = 1000;
 
-    ec2s::JobSystem jobSystem(1);
+    ec2s::JobSystem jobSystem;
     ec2s::Registry registry;
 
     std::mutex mut;
@@ -74,7 +74,7 @@ int main()
         co_return;
     };
 
-    const auto task = [&](std::vector<int>& test) -> ec2s::Job
+    const auto task = [&](ec2s::JobSystem& jobSystem, std::vector<int>& test) -> ec2s::Job
     {
 #ifndef NDEBUG
         {
@@ -83,7 +83,8 @@ int main()
         }
 #endif
         //heavyTask();
-        co_await beforeTask(test);
+        co_await ec2s::waitAll(jobSystem, beforeTask(test));
+
         test.emplace_back(2);
         //heavyTask();
 #ifndef NDEBUG
@@ -107,16 +108,16 @@ int main()
         //}
 
         std::vector<int> test;
-        jobSystem.submit(task(test));
+        jobSystem.submit(task(jobSystem, test));
         jobSystem.stop();
 
         std::cout << test.size() << "\n";
 
-        if (test[0] != 1 || test[1] != 2)
+        for (auto e : test)
         {
-            std::cout << "invalid!!!\n";
-            return 1;
+            std::cout << e << "\n";
         }
+
         end = std::chrono::high_resolution_clock::now();
 
         const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());

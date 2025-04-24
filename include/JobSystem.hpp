@@ -23,19 +23,58 @@
 
 namespace ec2s
 {
-    struct JobSystem;
-    struct JobList;
+    struct JobPromise;
+    class JobSystem;
+    template<typename... Args>
+    class WaitAllAwaiter;
+
+    /**
+     * @brief  internal representation of Job
+     */
+    struct Job
+    {
+        enum class Priority : uint8_t
+        {
+            eUrgent = 0,
+            eHigh   = 1,
+            eNormal = 2,
+            eLow    = 3,
+        };
+
+        using promise_type = JobPromise;
+
+        using HandleType = std::coroutine_handle<promise_type>;
+
+        Job(HandleType h, Priority priority = Priority::eNormal)
+            : handle(h)
+        {
+        }
+
+        bool operator<(const Job& another) const
+        {
+            return static_cast<std::underlying_type_t<Priority>>(this->priority) < static_cast<std::underlying_type_t<Priority>>(another.priority);
+        }
+
+        HandleType handle;
+        Priority priority;
+    };
 
     struct JobPromise
     {
-        friend class JobSystem;
-        friend class SuspendJob;
-        friend class FinalizeJob;
+        void set_continuation(std::coroutine_handle<> h)
+        {
+            continuation = h;
+        }
+
+        void set_on_complete(std::function<void()> fn)
+        {
+            on_complete = std::move(fn);
+        }
 
         Job get_return_object()
         {
             std::cout << "get_return_object" << "\n";
-            return Job::from_promise(*this);
+            return Job(Job::HandleType::from_promise(*this));
         }
 
         std::suspend_always initial_suspend()
@@ -45,11 +84,31 @@ namespace ec2s
             return std::suspend_always{};
         }
 
-        std::suspend_always final_suspend() noexcept
+        auto final_suspend() noexcept
         {
-            std::cout << "final_suspend" << "\n";
+            struct FinalAwaiter
+            {
+                bool await_ready() noexcept
+                {
+                    return false;
+                }
 
-            return std::suspend_always{};
+                void await_suspend(Job::HandleType h) noexcept
+                {
+                    if (h.promise().on_complete)
+                    {
+                        h.promise().on_complete();  // when_all用
+                    }
+                    else if (h.promise().continuation)
+                    {
+                        h.promise().continuation.resume();  // 単独await
+                    }
+                }
+                void await_resume() noexcept
+                {
+                }
+            };
+            return FinalAwaiter{};
         }
 
         void return_void()
@@ -64,180 +123,8 @@ namespace ec2s
             std::terminate();
         }
 
-    private:
-        JobSystem* pJobSystem = nullptr;
-        JobList* pJobList     = nullptr;
-    };
-
-    struct SuspendJob
-    {
-
-        constexpr bool await_ready() const noexcept
-        {
-            return false;
-        }
-
-        void await_suspend(std::coroutine_handle<JobPromise> handle) noexcept
-        {
-            std::cout << "await_suspend" << "\n";
-            auto& promise = handle.promise();
-
-            auto& jobList = *promise.pJobList;
-
-            jobList.add(promise.get_return_object());
-
-            
-
-            {
-                // --- Eager Workers ---
-                //
-                // Eagerly try to fetch & execute the next task from the front of the
-                // scheduler queue -
-                // We do this so that multiple threads can share the
-                // scheduling workload.
-                //
-                // But we can also disable that, so that there is only one thread
-                // that does the scheduling, and removing elements from the
-                // queue.
-
-                coroutine_handle_t c = task_list->pop_task();
-
-                if (c)
-                {
-                    assert(!c.done() && "task must not be done");
-                    c();
-                }
-            }
-        }
-
-        void await_resume() noexcept
-        {
-            std::cout << "await_resume" << "\n";
-        }
-    };
-
-    /**
-     * @brief  internal representation of Job
-     */
-    struct Job : std::coroutine_handle<JobPromise>
-    {
-        friend class JobSystem;
-
-        enum class Priority : uint8_t
-        {
-            eUrgent = 0,
-            eHigh   = 1,
-            eNormal = 2,
-            eLow    = 3,
-        };
-
-        using promise_type = ::JobPromise;
-
-        using HandleType = std::coroutine_handle<promise_type>;
-
-        Job(HandleType h, Priority p = Priority::eNormal)
-            : handle(h)
-            , priority(p)
-        {
-        }
-
-        Job(const Job&)            = delete;
-        Job& operator=(const Job&) = delete;
-
-        Job(Job&& other) noexcept
-            : handle(other.handle)
-            , priority(other.priority)
-        {
-            other.handle = nullptr;
-        }
-
-        Job& operator=(Job&& other) noexcept
-        {
-            this->handle   = other.handle;
-            this->priority = other.priority;
-            other.handle   = nullptr;
-
-            return *this;
-        }
-
-        Job(const Job&& other) noexcept
-            : handle(other.handle)
-            , priority(other.priority)
-        {
-        }
-
-        Job& operator=(const Job&& other) noexcept
-        {
-            this->handle   = other.handle;
-            this->priority = other.priority;
-
-            return *this;
-        }
-
-        void resume()
-        {
-            std::cout << "check resume" << "\n";
-
-            if (handle && !handle.done())
-            {
-                std::cout << "resume" << "\n";
-                handle.resume();
-            }
-        }
-
-        bool done() const
-        {
-            std::cout << "check done" << "\n";
-            return handle.done();
-        }
-
-        bool operator<(const Job& another) const
-        {
-            return static_cast<std::underlying_type_t<Priority>>(this->priority) < static_cast<std::underlying_type_t<Priority>>(another.priority);
-        }
-
-        HandleType handle;
-        Priority priority;
-    };
-
-    class JobList
-    {
-    public:
-        JobList() = default;
-        JobList(Job&& job)
-        {
-            mJobs.emplace_back(std::move(job));
-        }
-
-        JobList(const JobList&)            = delete;
-        JobList& operator=(const JobList&) = delete;
-        JobList(JobList&&)                 = default;
-        JobList& operator=(JobList&&)      = default;
-        ~JobList()
-        {
-            for (auto& job : mJobs)
-            {
-                if (job.handle)
-                {
-                    job.handle.destroy();
-                }
-            }
-        }
-
-        void add(Job&& job)
-        {
-            mJobs.emplace_back(std::move(job));
-        }
-
-        inline std::size_t getJobCount()
-        {
-            std::lock_guard<std::mutex> lock(mMutex);
-            return mJobs.size();
-        }
-
-    private:
-        std::mutex mMutex;
-        std::vector<Job> mJobs;
+        std::coroutine_handle<> continuation;
+        std::function<void()> on_complete = nullptr;
     };
 
     /**
@@ -252,7 +139,6 @@ namespace ec2s
          * @param workerThreadNum number of tasks to be executed in parallel (default: -1, use all hardware threads)
          */
         JobSystem(std::optional<size_t> workerThreadNum = std::nullopt)
-            : mStop(false)
         {
             if (!workerThreadNum)
             {
@@ -262,7 +148,10 @@ namespace ec2s
             assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
             mWorkerThreads.resize(workerThreadNum.value());
 
-            restart();
+            for (auto& thread : mWorkerThreads)
+            {
+                thread = std::jthread([this]() { workerLoop(); });
+            }
         }
 
         /** 
@@ -283,56 +172,27 @@ namespace ec2s
         }
 
         /** 
-         * @brief  restart the stopped JobSystem (all worker threads)
-         *  
-         */
-        void restart()
-        {
-            if (!mStop)
-            {
-                stop();
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(mMutex);
-                mStop = false;
-            }
-
-            for (auto& thread : mWorkerThreads)
-            {
-                thread = std::thread([this]() { workerLoop(); });
-            }
-        }
-
-        /** 
          * @brief  register the specified function as a job
          *  
          */
         void submit(Job&& job)
         {
-            assert(!mStop || !"This JobSystem is currently stopped!");
-            if (!mStop)
-            {
-                std::lock_guard<std::mutex> lock(mMutex);
-                mJobs.emplace(std::move(job));
-            }
+            std::lock_guard<std::mutex> lock(mMutex);
 
+            mJobs.emplace(std::move(job));
             mConditionVariable.notify_one();
         }
 
-        /** 
-         * @brief  stop all worker threads
-         *  
-         */
+        
         void stop()
         {
             {
-                std::unique_lock<std::mutex> lock(mMutex);
+                std::lock_guard<std::mutex> lock(mMutex);
                 mStop = true;
             }
 
             mConditionVariable.notify_all();
-
+            
             for (auto& thread : mWorkerThreads)
             {
                 if (thread.joinable())
@@ -340,16 +200,6 @@ namespace ec2s
                     thread.join();
                 }
             }
-        }
-
-        /** 
-         * @brief  join all worker threads once and restart them
-         *  
-         */
-        void join()
-        {
-            stop();
-            restart();
         }
 
         /** 
@@ -379,24 +229,21 @@ namespace ec2s
                         return;
                     }
 
-                    job = std::move(mJobs.top());
+                    job = mJobs.top();
                     mJobs.pop();
                 }
 
                 // execute job
                 if (job)
                 {
-                    while (!job->done())
-                    {
-                        job->resume();
-                    }
+                    job->handle.resume();
                 }
             }
         }
 
     private:
         //! worker threads
-        std::vector<std::thread> mWorkerThreads;
+        std::vector<std::jthread> mWorkerThreads;
         //! condition variable to control all worker threads
         std::condition_variable mConditionVariable;
 
@@ -409,6 +256,66 @@ namespace ec2s
         bool mStop;
         // ------------------
     };
+
+    template <typename... Jobs>
+    class WaitAllAwaiter
+    {
+    public:
+        WaitAllAwaiter(JobSystem& jobSystem, Jobs&&... js)
+            : mJobSystem(jobSystem)
+            , mJobs(std::forward<Jobs>(js)...)
+            , mCounter(sizeof...(Jobs))
+        {
+        }
+
+        bool await_ready() const noexcept
+        {
+            return mCounter == 0;
+        }
+
+        void await_suspend(std::coroutine_handle<> h)
+        {
+            mContinuation = h;
+            apply(
+                [this](Job& job)
+                {
+                    // 各ジョブ完了時に this->resume_one() を呼ぶよう設定
+                    job.handle.promise().set_on_complete([this] { this->resume_one(); });
+                    mJobSystem.submit(std::move(job));  // ← スレッドプールで実行
+                });
+        }
+
+        void await_resume() noexcept
+        {
+        }
+
+    private:
+        void resume_one()
+        {
+            if (mCounter.fetch_sub(1) == 1)
+            {
+                mContinuation.resume();  // 全部完了したら再開
+            }
+        }
+
+        template <typename F>
+        void apply(F&& f)
+        {
+            std::apply([&](auto&... job) { (f(job), ...); }, mJobs);
+        }
+
+        JobSystem& mJobSystem;
+        std::tuple<Jobs...> mJobs;
+        std::atomic<size_t> mCounter;
+        std::coroutine_handle<> mContinuation;
+    };
+
+
+    template <typename... Jobs>
+    auto static waitAll(JobSystem& jobSystem, Jobs&&... jobs)
+    {
+        return WaitAllAwaiter<Jobs...>(jobSystem, std::forward<Jobs>(jobs)...);
+    }
 
 }  // namespace ec2s
 
