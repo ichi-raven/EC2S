@@ -19,8 +19,6 @@
 #include <cassert>
 #include <future>
 
-#include <iostream>
-
 namespace ec2s
 {
     struct JobPromise;
@@ -47,6 +45,7 @@ namespace ec2s
 
         Job(HandleType h, Priority priority = Priority::eNormal)
             : handle(h)
+            , priority(priority)
         {
         }
 
@@ -56,7 +55,7 @@ namespace ec2s
         }
 
         HandleType handle;
-        Priority priority;
+        Priority priority = Priority::eNormal;  // default priority
     };
 
     struct JobPromise
@@ -73,14 +72,11 @@ namespace ec2s
 
         Job get_return_object()
         {
-            std::cout << "get_return_object" << "\n";
             return Job(Job::HandleType::from_promise(*this));
         }
 
         std::suspend_always initial_suspend()
         {
-            std::cout << "initial_suspend" << "\n";
-
             return std::suspend_always{};
         }
 
@@ -113,13 +109,10 @@ namespace ec2s
 
         void return_void()
         {
-            std::cout << "return_void" << "\n";
         }
 
         void unhandled_exception()
         {
-            std::cout << "unhandled_exception" << "\n";
-
             std::terminate();
         }
 
@@ -215,13 +208,15 @@ namespace ec2s
     private:
         void workerLoop()
         {
-            std::optional<Job> job;
 
             while (true)
             {
+                std::optional<Job> job;
+
                 // exclusive lock (wait job)
                 {
                     std::unique_lock<std::mutex> lock(mMutex);
+                    // TODO: mJobs.empty() is improper
                     mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
 
                     if (mStop && mJobs.empty())

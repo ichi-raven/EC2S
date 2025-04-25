@@ -52,22 +52,22 @@ int main()
 
     std::mutex mut;
 
-    const auto beforeTask = [&](std::vector<int>& test) -> ec2s::Job
+    const auto beforeTask = [&](std::vector<int>& test, int val) -> ec2s::Job
     {
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
+            std::cout << "[before task] thread ID : " << std::this_thread::get_id() << " start\n";
         }
 #endif
 
-        //heavyTask();
-        test.emplace_back(1);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        test.emplace_back(val);
 
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
+            std::cout << "[before task] thread ID : " << std::this_thread::get_id() << " end\n";
         }
 #endif
 
@@ -79,18 +79,19 @@ int main()
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " start\n";
+            std::cout << "[main task] thread ID : " << std::this_thread::get_id() << " start\n";
         }
 #endif
-        //heavyTask();
-        co_await ec2s::waitAll(jobSystem, beforeTask(test));
 
-        test.emplace_back(2);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        co_await ec2s::waitAll(jobSystem, beforeTask(test, 1), beforeTask(test, 2), beforeTask(test, 3), beforeTask(test, 4));
+
+        test.emplace_back(42);
         //heavyTask();
 #ifndef NDEBUG
         {
             std::unique_lock lock(mut);
-            std::cout << "thread ID : " << std::this_thread::get_id() << " end\n";
+            std::cout << "[main task] thread ID : " << std::this_thread::get_id() << " end\n";
         }
 #endif
 
@@ -109,9 +110,9 @@ int main()
 
         std::vector<int> test;
         jobSystem.submit(task(jobSystem, test));
-        jobSystem.stop();
 
-        std::cout << test.size() << "\n";
+        std::this_thread::sleep_for(std::chrono::milliseconds(3000));  // wait for all tasks to finish
+        jobSystem.stop();
 
         for (auto e : test)
         {
