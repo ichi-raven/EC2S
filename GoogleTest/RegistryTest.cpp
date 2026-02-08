@@ -9,6 +9,8 @@
 #include <gtest/gtest.h>
 #include "../include/EC2S.hpp"
 
+#include <chrono>
+
 // component structures for testing
 struct TestCompA
 {

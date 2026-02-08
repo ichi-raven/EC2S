@@ -8,6 +8,7 @@
 #ifndef EC2S_REGISTRY_HPP_
 #define EC2S_REGISTRY_HPP_
 
+#include "Condition.hpp"
 #include "SparseSet.hpp"
 #include "View.hpp"
 #include "Entity.hpp"
@@ -18,8 +19,6 @@
 #include <cassert>
 
 #ifndef NDEBUG
-#include <string>
-#include <iostream>
 #include <sstream>
 #endif
 
@@ -177,7 +176,7 @@ namespace ec2s
          * @param ...args arguments forwarded to the Component constructor
          */
         template <typename T, typename... Args>
-        void add(const Entity entity, Args... args)
+        T& add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
@@ -193,7 +192,8 @@ namespace ec2s
             }
 
             auto& ss = itr->second.get<SparseSet<T>>();
-            ss.emplace(entity, args...);
+
+            return ss.emplace(entity, args...);
         }
 
         /** 
@@ -223,7 +223,8 @@ namespace ec2s
          * @tparam IsEligibleEachFunc Trait to determine if the Func type is correctly callable for the specified Component type
          * @param func system function
          */
-        template <typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr>
+        template <typename T, typename Func>
+            requires Concepts::Invocable<Func, T>
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
@@ -240,10 +241,10 @@ namespace ec2s
          * @brief  system that takes Entity as its first argument
          *  
          * @tparam Func function type
-         * @tparam IsEligibleEachFunc Trait to determine if the Func type and Entity is correctly callable for the specified Component type
          * @param func system function
          */
-        template <typename T, typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr>
+        template <typename T, typename Func>
+            requires Concepts::InvocableWithEntity<Func, T>
         void each(Func func)
         {
             auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
@@ -254,17 +255,6 @@ namespace ec2s
 
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.each(func);
-        }
-
-        /** 
-         * @brief  called when an illegal Func type is passed to each()
-         *  
-         * @param func
-         */
-        template <typename T, typename Func, typename std::enable_if_t<!std::is_invocable_v<Func, T&> && !std::is_invocable_v<Func, Entity, T&>>>
-        void each(Func func)
-        {
-            static_assert(std::is_invocable_v<Func, T&> || std::is_invocable_v<Func, Entity, T&>, "ineligible Func type!");
         }
 
         /** 
@@ -286,16 +276,19 @@ namespace ec2s
          * @return created View
          */
         template <typename... Args>
-        View<Args...> view()
+        auto view() -> auto
         {
             checkAndAddNewComponent<Args...>();
-            return View<Args...>(mComponentArrayMap[TypeHasher::hash<Args>()].get<SparseSet<Args>>()...);
-        }
 
-        template<typename T>
-        SparseSet<T>& getSparseSet()
-        {
-            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>();
+            auto include = std::tuple_cat(TupleType<Args>{}...);
+            auto exclude = std::tuple_cat(ExcludeTupleType<Args>{}...);
+
+            static_assert(std::tuple_size_v<decltype(include)> != 0, "View must include at least one Component type!");
+
+            iterateTupleAndAssignSparseSet(include);
+            iterateTupleAndAssignSparseSet(exclude);
+
+            return View<decltype(include), decltype(exclude)>(include, exclude);
         }
 
         /** 
@@ -348,6 +341,16 @@ namespace ec2s
 #else
             constexpr TypeHash hash = TypeHasher::hash<Head>();
 #endif
+            // skip Exclude declaration
+            if constexpr (ExcludeType<Head>)
+            {
+                if constexpr (sizeof...(Tail) > 0)
+                {
+                    checkAndAddNewComponent<Tail...>();
+                }
+
+                return;
+            }
 
             if (!mComponentArrayMap.contains(hash))
             {
@@ -358,6 +361,31 @@ namespace ec2s
             if constexpr (sizeof...(Tail) > 0)
             {
                 checkAndAddNewComponent<Tail...>();
+            }
+        }
+
+        /** 
+         * @brief iterate through the tuple and assign SparseSet pointers to each element
+         * @warn if specified Component type is not registered, nullptr will be assigned
+         *  
+         */
+        template <size_t N = 0, typename TupleType>
+        void iterateTupleAndAssignSparseSet(TupleType& t)
+        {
+            if constexpr (N < std::tuple_size<TupleType>::value)
+            {
+                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                const TypeHash hash = TypeHasher::hash<ComponentType>();
+                if (mComponentArrayMap.contains(hash))
+                {
+                    std::get<N>(t) = &(mComponentArrayMap[hash].get<SparseSet<ComponentType>>());
+                }
+                else
+                {
+                    std::get<N>(t) = nullptr;
+                }
+
+                iterateTupleAndAssignSparseSet<N + 1>(t);
             }
         }
 

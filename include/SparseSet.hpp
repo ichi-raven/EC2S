@@ -1,4 +1,4 @@
-/*****************************************************************//**
+/*****************************************************************/ /**
  * @file   SparseSet.hpp
  * @brief  header file of SparseSet class
  * 
@@ -9,7 +9,7 @@
 #define EC2S_SPARSESET_HPP_
 
 #include "ISparseSet.hpp"
-#include "Traits.hpp"
+#include "Concepts.hpp"
 
 #include <cassert>
 #include <optional>
@@ -21,24 +21,28 @@ namespace ec2s
      * 
      * @tparam T component type
      */
-    template<typename T>
+    template <typename T>
     class SparseSet : public ISparseSet
     {
     public:
+        using ComponentType = T;
 
+    public:
         /** 
          * @brief  constructor
          *  
          */
         SparseSet()
-        {}
+        {
+        }
 
         /** 
          * @brief  destructor
          *  
          */
         virtual ~SparseSet() override
-        {}
+        {
+        }
 
         /** 
          * @brief  adds an element to the specified Entity
@@ -47,8 +51,8 @@ namespace ec2s
          * @param entity entity to be added an element
          * @param ...args arguments forwarded to the Component constructor
          */
-        template<typename... Args>
-        void emplace(Entity entity, Args... args)
+        template <typename... Args>
+        T& emplace(Entity entity, Args... args)
         {
             auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
 
@@ -59,7 +63,7 @@ namespace ec2s
 
             mSparseIndices[index] = mPacked.size();
             mDenseEntities.emplace_back(entity);
-            mPacked.emplace_back(args...);
+            return mPacked.emplace_back(args...);
         }
 
         /** 
@@ -76,11 +80,21 @@ namespace ec2s
 
         /** 
          * @brief  operator overload for index access to element
-         *  
+         * @warn   this overload does not check whether given entity is correct
          * @param entity entity as index
          * @return reference to the element
          */
         T& operator[](const Entity entity)
+        {
+            return mPacked[mSparseIndices[static_cast<size_t>(entity & kEntityIndexMask)]];
+        }
+
+        /** 
+         * @brief  find the corresponding element from the entity ID
+         * @param entity  entity ID
+         * @return 
+         */
+        T& get(const Entity entity)
         {
             auto index = static_cast<size_t>(entity & kEntityIndexMask);
             assert(index < mSparseIndices.size() || !"accessed by invalid entity!");
@@ -102,7 +116,7 @@ namespace ec2s
          */
         bool getSparseIndexIfValid(const Entity entity, std::size_t& sparseIndex_out)
         {
-            auto index = static_cast<size_t>(entity & kEntityIndexMask);
+            auto index              = static_cast<size_t>(entity & kEntityIndexMask);
             std::size_t sparseIndex = 0;
             if (index >= mSparseIndices.size() || (sparseIndex = mSparseIndices[index]) >= mPacked.size())
             {
@@ -133,10 +147,10 @@ namespace ec2s
          *  
          * @tparam T component type
          * @tparam Func function type
-         * @tparam IsEligibleEachFunc Trait to determine if the Func type is correctly callable for the specified Component type
          * @param func system function
          */
-        template<typename Func, typename Traits::IsEligibleEachFunc<Func, T>* = nullptr >
+        template <typename Func>
+            requires Concepts::Invocable<Func, T> 
         void each(Func func)
         {
             for (auto& e : mPacked)
@@ -152,7 +166,8 @@ namespace ec2s
          * @tparam IsEligibleEachFunc Trait to determine if the Func type and Entity is correctly callable for the specified Component type
          * @param func system function
          */
-        template<typename Func, typename Traits::IsEligibleEachFunc<Func, Entity, T>* = nullptr >
+        template <typename Func>
+            requires Concepts::InvocableWithEntity<Func, T>   
         void each(Func func)
         {
             for (std::size_t i = 0; i < mPacked.size(); ++i)
@@ -182,7 +197,7 @@ namespace ec2s
             std::swap(mPacked[sparseIndex], mPacked.back());
             mPacked.pop_back();
         }
-        
+
         /** 
          * @brief  implementation of the type-dependent part of all element clearing
          *  
@@ -195,6 +210,6 @@ namespace ec2s
         //! actual element's vector
         std::vector<T> mPacked;
     };
-}
+}  // namespace ec2s
 
 #endif

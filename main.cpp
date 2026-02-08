@@ -2,8 +2,7 @@
 
 #include <iostream>
 #include <chrono>
-
-void test();
+#include <random>
 
 using namespace ec2s;
 
@@ -31,11 +30,16 @@ void heavyTask()
     registry.each<double>([](double& e) { e += 2.; });
     registry.each<char>([](char& e) { e += 1; });
 
+    registry.each<int, Exclude<double>>([]([[maybe_unused]] Entity entity, int& e) { e += 1; });
+
+    // validation
     bool succeeded = true;
 
-    registry.each<int>([&](int& e) { succeeded = (e == 2); });
-    registry.each<double>([&](double& e) { succeeded = (e == 2.3); });
-    registry.each<char>([&](char& e) { succeeded = (e == 'b'); });
+    registry.each<int, double>([&](int& e, double& e2) { succeeded &= (e == 2); });
+    registry.each<int, char>([&](int& e, char& e2) { succeeded &= (e == 3); });
+
+    registry.each<double>([&](double& e) { succeeded &= (e == 2.3); });
+    registry.each<char>([&](char& e) { succeeded &= (e == 'b'); });
 
     if (!succeeded)
     {
@@ -43,100 +47,92 @@ void heavyTask()
     }
 }
 
+void loadTest()
+{
+    constexpr int kTestTime = static_cast<std::size_t>(1e3);
+    ThreadPool threadPool;
+
+    auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTestTime; ++i)
+    {
+        threadPool.submit(heavyTask);
+    }
+    threadPool.wait();
+    auto end = std::chrono::steady_clock::now();
+    std::cout << "parallel time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+
+    start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTestTime; ++i)
+    {
+        heavyTask();
+    }
+    end = std::chrono::steady_clock::now();
+    std::cout << "serial time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+}
+
+void parallelTest()
+{
+    ThreadPool threadPool(4);
+
+    auto sleepRandomMs = []
+    {
+        using namespace std::chrono_literals;
+
+        static thread_local std::mt19937 rng{ std::random_device{}() };
+        static thread_local std::uniform_int_distribution<int> dist(1, 30);
+
+        std::this_thread::sleep_for(dist(rng) * 1ms);
+    };
+
+    // ordered parallel tasks with dependencies
+
+    const auto checkTask1      = []() { std::cout << "called 1\n"; };
+    const auto checkTask1a     = []() { std::cout << "called 1a\n"; };
+    const auto checkTask2      = []() { std::cout << "called 2\n"; };
+    const auto checkTask2a     = []() { std::cout << "called 2a\n"; };
+    const auto checkTask2b     = []() { std::cout << "called 2b\n"; };
+    const auto checkTask3      = []() { std::cout << "called 3\n"; };
+    const auto checkTask4      = []() { std::cout << "called 4\n"; };
+    const auto checkTask5      = []() { std::cout << "called 5\n"; };
+    const auto independentTask = []() { std::cout << "independent\n"; };
+
+    auto& job1  = threadPool.createJob(checkTask1);
+    auto& job1a = threadPool.createJob(checkTask1a);
+    auto& job2  = threadPool.createJob(checkTask2);
+    auto& job2a = threadPool.createJob(checkTask2a);
+    auto& job2b = threadPool.createJob(checkTask2b);
+    auto& job3  = threadPool.createJob(checkTask3);
+    auto& job4  = threadPool.createJob(checkTask4);
+    auto& job5  = threadPool.createJob(checkTask5);
+
+    job1.addChild(job2);
+    job1a.addChild(job2);
+    job1.addChild(job2a);
+    job1.addChild(job2b);
+    job2.addChild(job3);
+    job2a.addChild(job3);
+    job3.addChild(job4);
+    job4.addChild(job5);
+
+    std::cout << "start submitting all jobs...\n";
+
+    // submit in random order with independent tasks
+    threadPool.submit(independentTask);
+    sleepRandomMs();
+    threadPool.submit(job1);
+    threadPool.submit(independentTask);
+    sleepRandomMs();
+    threadPool.submit(job1a);
+    threadPool.submit(independentTask);
+    threadPool.submit(independentTask);
+
+    threadPool.wait();
+    std::cout << "all jobs done\n";
+}
+
 int main()
 {
-    constexpr int kTestNum = 1000;
-
-    ec2s::JobSystem jobSystem;
-    ec2s::Registry registry;
-
-    std::mutex mut;
-
-    const auto beforeTask = [&](std::vector<int>& test, int val) -> ec2s::Job
-    {
-#ifndef NDEBUG
-        {
-            std::unique_lock lock(mut);
-            std::cout << "[before task] thread ID : " << std::this_thread::get_id() << " start\n";
-        }
-#endif
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        test.emplace_back(val);
-
-#ifndef NDEBUG
-        {
-            std::unique_lock lock(mut);
-            std::cout << "[before task] thread ID : " << std::this_thread::get_id() << " end\n";
-        }
-#endif
-
-        co_return;
-    };
-
-    const auto task = [&](ec2s::JobSystem& jobSystem, std::vector<int>& test) -> ec2s::Job
-    {
-#ifndef NDEBUG
-        {
-            std::unique_lock lock(mut);
-            std::cout << "[main task] thread ID : " << std::this_thread::get_id() << " start\n";
-        }
-#endif
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        co_await ec2s::waitAll(jobSystem, beforeTask(test, 1), beforeTask(test, 2), beforeTask(test, 3), beforeTask(test, 4));
-
-        test.emplace_back(42);
-        //heavyTask();
-#ifndef NDEBUG
-        {
-            std::unique_lock lock(mut);
-            std::cout << "[main task] thread ID : " << std::this_thread::get_id() << " end\n";
-        }
-#endif
-
-        co_return;
-    };
-
-    std::chrono::high_resolution_clock::time_point start, end;
-
-    // parallel
-    {
-        start = std::chrono::high_resolution_clock::now();
-        //for (int i = 0; i < kTestNum; ++i)
-        //{
-        //    jobSystem.schedule(task(i));
-        //}
-
-        std::vector<int> test;
-        jobSystem.submit(task(jobSystem, test));
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(3000));  // wait for all tasks to finish
-        jobSystem.stop();
-
-        for (auto e : test)
-        {
-            std::cout << e << "\n";
-        }
-
-        end = std::chrono::high_resolution_clock::now();
-
-        const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-        std::cout << "parallel : " << elapsed << "[ms]\n";
-    }
-    std::cout << "\n\n";
-
-    // serial
-    //{
-    //    start = std::chrono::high_resolution_clock::now();
-    //    for (int i = 0; i < kTestNum; ++i)
-    //    {
-    //        task(i).resume();
-    //    }
-    //    end                = std::chrono::high_resolution_clock::now();
-    //    const auto elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-    //    std::cout << "serial : " << elapsed << "[ms]\n";
-    //}
-
+    //loadTest();
+    parallelTest();
     return 0;
 }

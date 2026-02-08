@@ -9,174 +9,167 @@
 #ifndef EC2S_INCLUDE_JOBSYSTEM_HPP_
 #define EC2S_INCLUDE_JOBSYSTEM_HPP_
 
-#include <coroutine>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 #include <vector>
-#include <queue>
 #include <functional>
 #include <cassert>
-#include <future>
+#include <unordered_set>
 
 namespace ec2s
 {
-    struct JobPromise;
-    class JobSystem;
-    template<typename... Args>
-    class WaitAllAwaiter;
-
-    /**
-     * @brief  internal representation of Job
-     */
-    struct Job
+    class Job
     {
-        enum class Priority : uint8_t
+        friend class ThreadPool;
+
+    public:
+        Job()  = default;
+        ~Job() = default;
+
+        void addChild(Job& child)
         {
-            eUrgent = 0,
-            eHigh   = 1,
-            eNormal = 2,
-            eLow    = 3,
-        };
-
-        using promise_type = JobPromise;
-
-        using HandleType = std::coroutine_handle<promise_type>;
-
-        Job(HandleType h, Priority priority = Priority::eNormal)
-            : handle(h)
-            , priority(priority)
-        {
+            child.isChild = true;
+            pChildren.push_back(&child);
+            child.dependencyCount.fetch_add(1, std::memory_order_relaxed);
         }
 
-        bool operator<(const Job& another) const
-        {
-            return static_cast<std::underlying_type_t<Priority>>(this->priority) < static_cast<std::underlying_type_t<Priority>>(another.priority);
-        }
-
-        HandleType handle;
-        Priority priority = Priority::eNormal;  // default priority
+    private:
+        std::function<void()> f;
+        Job* pNext{ nullptr };
+        std::atomic_int dependencyCount{ 0 };
+        std::vector<Job*> pChildren;
+        bool isChild{ false };
     };
 
-    struct JobPromise
-    {
-        void set_continuation(std::coroutine_handle<> h)
-        {
-            continuation = h;
-        }
-
-        void set_on_complete(std::function<void()> fn)
-        {
-            on_complete = std::move(fn);
-        }
-
-        Job get_return_object()
-        {
-            return Job(Job::HandleType::from_promise(*this));
-        }
-
-        std::suspend_always initial_suspend()
-        {
-            return std::suspend_always{};
-        }
-
-        auto final_suspend() noexcept
-        {
-            struct FinalAwaiter
-            {
-                bool await_ready() noexcept
-                {
-                    return false;
-                }
-
-                void await_suspend(Job::HandleType h) noexcept
-                {
-                    if (h.promise().on_complete)
-                    {
-                        h.promise().on_complete();  // when_all用
-                    }
-                    else if (h.promise().continuation)
-                    {
-                        h.promise().continuation.resume();  // 単独await
-                    }
-                }
-                void await_resume() noexcept
-                {
-                }
-            };
-            return FinalAwaiter{};
-        }
-
-        void return_void()
-        {
-        }
-
-        void unhandled_exception()
-        {
-            std::terminate();
-        }
-
-        std::coroutine_handle<> continuation;
-        std::function<void()> on_complete = nullptr;
-    };
-
-    /**
-     * @brief  job system for parallel execution of specified job(task)
-     */
-    class JobSystem
+    class ThreadPool
     {
     public:
-        /** 
-         * @brief  constructor
-         *  
-         * @param workerThreadNum number of tasks to be executed in parallel (default: -1, use all hardware threads)
-         */
-        JobSystem(std::optional<size_t> workerThreadNum = std::nullopt)
+        // ThreadPool Public Methods
+        explicit ThreadPool(std::optional<size_t> nThreads = std::nullopt)
+            : mStop(false)
+            , mpJobHead(nullptr)
+            , mRemainingJobNum(0)
         {
-            if (!workerThreadNum)
+            if (!nThreads)
             {
-                workerThreadNum = std::max(1u, std::thread::hardware_concurrency() - 1);
+                nThreads = std::thread::hardware_concurrency() - 1;
             }
 
-            assert(workerThreadNum >= 1 || "workerThreadNum must be greater than 0");
-            mWorkerThreads.resize(workerThreadNum.value());
+            mThreads.resize(std::max(static_cast<size_t>(1u), *nThreads));
 
-            for (auto& thread : mWorkerThreads)
+            restart();
+        }
+
+        ~ThreadPool()
+        {
+            stop();
+
+            // Clean up remaining jobs
+            while (mpJobHead != nullptr)
             {
-                thread = std::jthread([this]() { workerLoop(); });
+                Job* pJob = mpJobHead;
+                mpJobHead = pJob->pNext;
+                delete pJob;
             }
         }
 
-        /** 
-         * @brief  destructor(stop all worker threads)
-         *  
-         */
-        ~JobSystem()
+        size_t size() const
         {
-            // double check
-            if (!mStop)
+            return mThreads.size();
+        }
+
+        Job& createJob(const std::function<void()>& f)
+        {
+            Job* pJob   = new Job();
+            pJob->f     = f;
+            pJob->pNext = nullptr;
+            return *pJob;
+        }
+
+        void submit(Job& job)
+        {
+            std::lock_guard<std::mutex> lock(mMutex);
+            Job* pJob = &job;
+            if (mpJobHead == nullptr)
             {
-                std::lock_guard<std::mutex> lock(mMutex);
-                if (!mStop)
+                mpJobHead = pJob;
+            }
+            else
+            {
+                pJob->pNext = mpJobHead;
+                mpJobHead   = pJob;
+            }
+
+            int childJobs               = 0;
+            const auto countAllChildren = [&childJobs, this](Job* pJob, const auto& func) -> void
+            {
+                for (auto* pChild : pJob->pChildren)
                 {
-                    stop();
+                    if (mpSubmittedJobs.contains(pChild))
+                    {
+                        continue;
+                    }
+
+                    mpSubmittedJobs.insert(pChild);
+                    ++childJobs;
+                    func(pChild, func);
                 }
-            }
+            };
+            countAllChildren(&job, countAllChildren);
+
+            mRemainingJobNum.fetch_add(1 + childJobs, std::memory_order_relaxed);
+
+            cv.notify_one();
         }
 
-        /** 
-         * @brief  register the specified function as a job
-         *  
-         */
-        void submit(Job&& job)
+        void submit(const std::function<void()>& f)
         {
             std::lock_guard<std::mutex> lock(mMutex);
 
-            mJobs.emplace(std::move(job));
-            mConditionVariable.notify_one();
+            Job* pJob   = new Job();
+            pJob->f     = f;
+            pJob->pNext = nullptr;
+
+            if (mpJobHead == nullptr)
+            {
+                mpJobHead = pJob;
+            }
+            else
+            {
+                pJob->pNext = mpJobHead;
+                mpJobHead   = pJob;
+            }
+
+            mRemainingJobNum.fetch_add(1, std::memory_order_relaxed);
+
+            cv.notify_one();
         }
 
-        
+        void wait()
+        {
+            while (mpJobHead != nullptr)
+            {
+                {
+                    std::lock_guard<std::mutex> lock(mMutex);
+                    if (mpJobHead == nullptr)
+                    {
+                        break;  // All jobs are processed
+                    }
+                }
+
+                std::this_thread::yield();
+            }
+
+            while (mRemainingJobNum.load(std::memory_order_acquire) != 0)
+            {
+                std::this_thread::yield();  // Wait until all jobs are done
+            }
+
+            mRemainingJobNum.store(0, std::memory_order_relaxed);
+            mpSubmittedJobs.clear();
+        }
+
         void stop()
         {
             {
@@ -184,132 +177,264 @@ namespace ec2s
                 mStop = true;
             }
 
-            mConditionVariable.notify_all();
-            
-            for (auto& thread : mWorkerThreads)
+            cv.notify_all();
+
+            while (true)
+            {
+                // Double check
+                if (mpJobHead == nullptr)
+                {
+                    std::lock_guard<std::mutex> lock(mMutex);
+                    if (mpJobHead == nullptr)
+                    {
+                        break;  // All jobs are processed
+                    }
+                }
+            }
+
+            for (auto& thread : mThreads)
             {
                 if (thread.joinable())
                 {
                     thread.join();
                 }
             }
+
+            mRemainingJobNum.store(0, std::memory_order_relaxed);
+            mpSubmittedJobs.clear();
+            mStop = false;
         }
 
-        /** 
-         * @brief  get the current number of worker threads
-         *  
-         * @return current number of worker threads
-         */
-        uint32_t getWorkerThreadNum() const
+        void restart()
         {
-            return static_cast<uint32_t>(mWorkerThreads.size());
+            std::lock_guard<std::mutex> lock(mMutex);
+            for (auto& thread : mThreads)
+            {
+                thread = std::thread(&ThreadPool::worker, this);
+            }
         }
 
     private:
-        void workerLoop()
+        void worker()
         {
-
             while (true)
             {
-                std::optional<Job> job;
+                std::unique_lock<std::mutex> lock(mMutex);
+                cv.wait(lock, [this] { return mStop || mpJobHead != nullptr; });
 
-                // exclusive lock (wait job)
+                if (mStop && mpJobHead == nullptr)
                 {
-                    std::unique_lock<std::mutex> lock(mMutex);
-                    // TODO: mJobs.empty() is improper
-                    mConditionVariable.wait(lock, [this] { return mStop || !mJobs.empty(); });
+                    return;
+                }
 
-                    if (mStop && mJobs.empty())
+                Job* pJob = mpJobHead;
+                if (pJob == nullptr)
+                {
+                    continue;
+                }
+
+                mpJobHead = pJob->pNext;
+
+                lock.unlock();
+
+                pJob->f();
+
+                mRemainingJobNum.fetch_sub(1, std::memory_order_relaxed);
+
+                for (auto* pChild : pJob->pChildren)
+                {
+                    if (pChild->dependencyCount.fetch_sub(1) == 1)
+                    {
+                        std::lock_guard<std::mutex> lock(mMutex);
+                        pChild->pNext = mpJobHead;
+                        mpJobHead     = pChild;
+                        cv.notify_one();
+                    }
+                }
+
+                delete pJob;
+            }
+        }
+
+    private:
+        // ThreadPool Private Members
+        std::vector<std::thread> mThreads;
+        mutable std::mutex mMutex;
+        std::atomic_int mRemainingJobNum;
+        std::unordered_set<Job*> mpSubmittedJobs;
+        bool mStop;
+        Job* mpJobHead;
+        std::condition_variable cv;
+    };
+
+    template <typename T>
+    concept Job1DFunc = requires(const T& f, size_t x) {
+        { f(x) };
+    };
+
+    template <typename T>
+    concept Job1DChunkFunc = requires(const T& f, size_t start, size_t end) {
+        { f(start, end) };
+    };
+
+    template <typename T>
+    concept Job2DFunc = requires(const T& f, size_t x, size_t y) {
+        { f(x, y) };
+    };
+
+    template <typename T>
+    concept Job2DChunkFunc = requires(const T& f, std::pair<size_t, size_t> start, std::pair<size_t, size_t> end) {
+        { f(start, end) };
+    };
+
+    template <Job1DFunc JobFunc>  // Constrain by concept
+    void parallelFor(uint32_t start, uint32_t end, const JobFunc& job, ThreadPool& threadPool)
+    {
+        assert(threadPool.size() > 0);
+        assert(end >= start);
+
+        constexpr uint32_t kInvalidRem = 0xFFFFFFFF;
+        const uint32_t range           = end - start;
+        const uint32_t chunkSize       = range / threadPool.size();
+        const uint32_t remainder       = range % threadPool.size();
+        const uint32_t remStart        = end - remainder;
+
+        for (uint32_t i = 0; i < threadPool.size(); ++i)
+        {
+            const uint32_t chunkStart = start + i * chunkSize;
+            const uint32_t chunkEnd   = chunkStart + chunkSize;
+            const uint32_t rem        = (i < remainder ? remStart + i : kInvalidRem);
+
+            if (chunkEnd == chunkStart && rem == kInvalidRem)
+            {
+                break;
+            }
+
+            threadPool.submit(
+                [chunkStart, chunkEnd, rem, &job]()
+                {
+                    for (uint32_t j = chunkStart; j < chunkEnd; ++j)
+                    {
+                        job(j);
+                    }
+
+                    if (rem == kInvalidRem)
                     {
                         return;
                     }
 
-                    job = mJobs.top();
-                    mJobs.pop();
-                }
-
-                // execute job
-                if (job)
-                {
-                    job->handle.resume();
-                }
-            }
-        }
-
-    private:
-        //! worker threads
-        std::vector<std::jthread> mWorkerThreads;
-        //! condition variable to control all worker threads
-        std::condition_variable mConditionVariable;
-
-        // async-------------
-        //! mutex for all worker threads
-        std::mutex mMutex;
-        //! jobs queue
-        std::priority_queue<Job> mJobs;
-        //! flag indicating whether the system is stopped
-        bool mStop;
-        // ------------------
-    };
-
-    template <typename... Jobs>
-    class WaitAllAwaiter
-    {
-    public:
-        WaitAllAwaiter(JobSystem& jobSystem, Jobs&&... js)
-            : mJobSystem(jobSystem)
-            , mJobs(std::forward<Jobs>(js)...)
-            , mCounter(sizeof...(Jobs))
-        {
-        }
-
-        bool await_ready() const noexcept
-        {
-            return mCounter == 0;
-        }
-
-        void await_suspend(std::coroutine_handle<> h)
-        {
-            mContinuation = h;
-            apply(
-                [this](Job& job)
-                {
-                    // 各ジョブ完了時に this->resume_one() を呼ぶよう設定
-                    job.handle.promise().set_on_complete([this] { this->resume_one(); });
-                    mJobSystem.submit(std::move(job));  // ← スレッドプールで実行
+                    job(rem);
                 });
         }
 
-        void await_resume() noexcept
+        threadPool.wait();
+    }
+
+    template <Job1DChunkFunc JobFunc>  // Constrain by concept
+    void parallelForChunk(uint32_t start, uint32_t end, const JobFunc& job, ThreadPool& threadPool)
+    {
+        assert(threadPool.size() > 0);
+        assert(end >= start);
+
+        const uint32_t range     = end - start;
+        const uint32_t remainder = range % threadPool.size();
+
+        uint32_t now = start;
+
+        for (uint32_t i = 0; i < threadPool.size(); ++i)
         {
+            const uint32_t chunkSize = range / threadPool.size() + (i < remainder ? 1 : 0);
+            threadPool.submit([&job]() { job(now, now + chunkSize); });
+
+            now += chunkSize;
         }
 
-    private:
-        void resume_one()
+        threadPool.wait();
+    }
+
+    template <Job2DFunc JobFunc>  // Constrain by concept
+    void parallelFor2D(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& job, ThreadPool& threadPool)
+    {
+        assert(threadPool.size() > 0);
+        assert(end.first >= start.first && end.second >= start.second);
+
+        constexpr uint32_t kInvalidRem = 0xFFFFFFFF;
+        const uint32_t rangeX          = end.first - start.first;
+        const uint32_t chunkSizeX      = rangeX / threadPool.size();
+        const uint32_t remainderX      = rangeX % threadPool.size();
+        const uint32_t remStart        = end.first - remainderX;
+
+        for (uint32_t i = 0; i < threadPool.size(); ++i)
         {
-            if (mCounter.fetch_sub(1) == 1)
+            const uint32_t chunkStartX = start.first + i * chunkSizeX;
+            const uint32_t chunkEndX   = chunkStartX + chunkSizeX;
+            const uint32_t rem         = (i < remainderX ? remStart + i : kInvalidRem);
+
+            if (chunkEndX == chunkStartX && rem == kInvalidRem)
             {
-                mContinuation.resume();  // 全部完了したら再開
+                // prevent unnecessary thread creation
+                break;
+            }
+
+            threadPool.submit(
+                [chunkStartX, chunkEndX, rem, start, end, &job]()
+                {
+                    for (uint32_t j = chunkStartX; j < chunkEndX; ++j)
+                    {
+                        for (uint32_t k = start.second; k < end.second; ++k)
+                        {
+                            job(j, k);
+                        }
+                    }
+
+                    if (rem == kInvalidRem)
+                    {
+                        return;
+                    }
+
+                    for (uint32_t k = start.second; k < end.second; ++k)
+                    {
+                        job(rem, k);
+                    }
+                });
+        }
+
+        threadPool.wait();
+    }
+
+    template <Job2DChunkFunc JobFunc>  // Constrain by concept
+    void parallelFor2DChunk(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& job, ThreadPool& threadPool)
+    {
+        assert(threadPool.size() > 0);
+        assert(end.first >= start.first && end.second >= start.second);
+
+        const uint32_t rangeX = end.first - start.first;
+        const uint32_t rangeY = end.second - start.second;
+
+        if (rangeX > rangeY)  // landscape
+        {
+            const uint32_t remainderX = rangeX % threadPool.size();
+            uint32_t nowX             = start.first;
+            for (uint32_t i = 0; i < threadPool.size(); ++i)
+            {
+                const uint32_t chunkSizeX = rangeX / threadPool.size() + (i < remainderX ? 1 : 0);
+                threadPool.submit([nowX, chunkSizeX, start, end, &job]() { job({ nowX, start.second }, { nowX + chunkSizeX, end.second }); });
+                nowX += chunkSizeX;
+            }
+        }
+        else  // portrait
+        {
+            const uint32_t remainderY = rangeY % threadPool.size();
+            uint32_t nowY             = start.second;
+            for (uint32_t i = 0; i < threadPool.size(); ++i)
+            {
+                const uint32_t chunkSizeY = rangeY / threadPool.size() + (i < remainderY ? 1 : 0);
+                threadPool.submit([nowY, chunkSizeY, start, end, &job]() { job({ start.first, nowY }, { end.first, nowY + chunkSizeY }); });
+                nowY += chunkSizeY;
             }
         }
 
-        template <typename F>
-        void apply(F&& f)
-        {
-            std::apply([&](auto&... job) { (f(job), ...); }, mJobs);
-        }
-
-        JobSystem& mJobSystem;
-        std::tuple<Jobs...> mJobs;
-        std::atomic<size_t> mCounter;
-        std::coroutine_handle<> mContinuation;
-    };
-
-
-    template <typename... Jobs>
-    auto static waitAll(JobSystem& jobSystem, Jobs&&... jobs)
-    {
-        return WaitAllAwaiter<Jobs...>(jobSystem, std::forward<Jobs>(jobs)...);
+        threadPool.wait();
     }
 
 }  // namespace ec2s
