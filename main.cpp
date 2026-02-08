@@ -72,13 +72,13 @@ void loadTest()
 
 void parallelTest()
 {
-    ThreadPool threadPool(4);
+    ThreadPool threadPool;
 
     auto sleepRandomMs = []
     {
         using namespace std::chrono_literals;
 
-        static thread_local std::mt19937 rng{ std::random_device{}() };
+        static thread_local std::mt19937_64 rng{ std::random_device{}() };
         static thread_local std::uniform_int_distribution<int> dist(1, 30);
 
         std::this_thread::sleep_for(dist(rng) * 1ms);
@@ -130,9 +130,65 @@ void parallelTest()
     std::cout << "all jobs done\n";
 }
 
+void sortTest()
+{
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e2);
+    std::vector<Entity> entities(kTestEntityNum);
+
+    std::vector<int> groundTruth(kTestEntityNum);
+    std::iota(groundTruth.begin(), groundTruth.end(), 0);
+    std::vector<int> shuffled = groundTruth;
+    std::shuffle(shuffled.begin(), shuffled.end(), std::mt19937_64{ std::random_device{}() });
+
+    Registry registry;
+    for (std::size_t i = 0; i < kTestEntityNum; ++i)
+    {
+        entities[i] = registry.create();
+        registry.add<int>(entities[i], shuffled[i]);
+    }
+
+    registry.sort<int>([](const int& a, const int& b) { return a < b; });
+
+    bool succeeded = true;
+
+    // dense access check
+    registry.each<int>(
+        [&](const int& e)
+        {
+            static std::size_t index = 0;
+            succeeded &= (e == groundTruth[index]);
+            ++index;
+        });
+
+    // sparse access check
+    for (std::size_t i = 0; i < kTestEntityNum; ++i)
+    {
+        const int& e = registry.get<int>(entities[i]);
+        succeeded &= (e == static_cast<int>(i));
+
+        if (!succeeded)
+        {
+            std::cout << "failed at entity " << entities[i] << "\n";
+            std::cout << "expected " << static_cast<int>(i) << ", got " << e << "\n";
+            break;
+        }
+    }
+
+    if (succeeded)
+    {
+        std::cout << "sort test succeeded\n";
+    }
+    else
+    {
+        std::cout << "sort test failed\n";
+    }
+}
+
 int main()
 {
-    //loadTest();
+    loadTest();
     parallelTest();
+    sortTest();
+
     return 0;
 }

@@ -14,9 +14,9 @@
 #include "Entity.hpp"
 #include "StackAny.hpp"
 
-#include <unordered_map>
-#include <queue>
 #include <cassert>
+#include <queue>
+#include <unordered_map>
 
 #ifndef NDEBUG
 #include <sstream>
@@ -175,7 +175,8 @@ namespace ec2s
          * @param entity Entity to add Component
          * @param ...args arguments forwarded to the Component constructor
          */
-        template <typename T, typename... Args>
+        template <typename T, typename ComponentAllocator = std::allocator<T>, typename... Args>
+            requires Concepts::AllocatorConcept<ComponentAllocator>
         T& add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
@@ -187,7 +188,7 @@ namespace ec2s
             auto&& itr = mComponentArrayMap.find(hash);
             if (itr == mComponentArrayMap.end())
             {
-                itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
+                itr = mComponentArrayMap.emplace(hash, SparseSet<T, ComponentAllocator>()).first;
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
@@ -213,6 +214,20 @@ namespace ec2s
 
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.remove(entity);
+        }
+
+        template <typename T, typename Predicate>
+            requires Concepts::Predicate<Predicate, T>
+        void sort(Predicate predicate)
+        {
+            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
+
+            auto& ss = itr->second.get<SparseSet<T>>();
+            ss.sort(predicate);
         }
 
         /** 

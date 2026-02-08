@@ -142,6 +142,7 @@
     <ClInclude Include="..\include\SparseSet.hpp" />
     <ClInclude Include="..\include\StackAny.hpp" />
     <ClInclude Include="..\include\Concepts.hpp" />
+    <ClInclude Include="..\include\TLSFAllocator.hpp" />
     <ClInclude Include="..\include\TypeHash.hpp" />
     <ClInclude Include="..\include\View.hpp" />
   </ItemGroup>

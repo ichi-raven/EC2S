@@ -14,6 +14,7 @@
 #include <sstream>
 #endif
 
+#include "Concepts.hpp"
 #include "TypeHash.hpp"
 #include "Entity.hpp"
 
@@ -108,7 +109,7 @@ namespace ec2s
             }
 
             const std::size_t sparseIndex = mSparseIndices[index];
-            
+
             return sparseIndex != kTombstone && (mDenseEntities[sparseIndex] & kEntitySlotMask) == (entity & kEntitySlotMask);
         }
 
@@ -182,7 +183,7 @@ namespace ec2s
          */
         virtual void clearPackedElement() = 0;
 
-        //! sparse index to DenceEntities (mapping from Entity to DenseEntities)
+        //! sparse index to DenseEntities (mapping from Entity to DenseEntities)
         std::vector<std::size_t> mSparseIndices;
         //! actual dense Entity
         std::vector<Entity> mDenseEntities;

@@ -11,7 +11,9 @@
 #include "ISparseSet.hpp"
 #include "Concepts.hpp"
 
+#include <algorithm>
 #include <cassert>
+#include <numeric>
 #include <optional>
 
 namespace ec2s
@@ -21,7 +23,8 @@ namespace ec2s
      * 
      * @tparam T component type
      */
-    template <typename T>
+    template <typename T, typename ComponentAllocator>  // WARN: default allocator is already defined in "Condition.hpp" for forward declaration
+        requires Concepts::AllocatorConcept<ComponentAllocator>
     class SparseSet : public ISparseSet
     {
     public:
@@ -33,6 +36,15 @@ namespace ec2s
          *  
          */
         SparseSet()
+        {
+        }
+
+        /** 
+         * @brief  constructor
+         *  
+         */
+        SparseSet(ComponentAllocator& alloc)
+            : mPacked(alloc)
         {
         }
 
@@ -150,7 +162,7 @@ namespace ec2s
          * @param func system function
          */
         template <typename Func>
-            requires Concepts::Invocable<Func, T> 
+            requires Concepts::Invocable<Func, T>
         void each(Func func)
         {
             for (auto& e : mPacked)
@@ -167,12 +179,34 @@ namespace ec2s
          * @param func system function
          */
         template <typename Func>
-            requires Concepts::InvocableWithEntity<Func, T>   
+            requires Concepts::InvocableWithEntity<Func, T>
         void each(Func func)
         {
             for (std::size_t i = 0; i < mPacked.size(); ++i)
             {
                 func(mDenseEntities[i], mPacked[i]);
+            }
+        }
+
+        template <typename Predicate>
+            requires Concepts::Predicate<Predicate, T>
+        void sort(Predicate& predicate)
+        {
+            std::sort(mPacked.begin(), mPacked.end(), std::move(predicate));
+
+            for (std::size_t pos = 0, end = mDenseEntities.size(); pos < end; ++pos)
+            {
+                auto curr = pos;
+                auto next = mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)];
+
+                while (curr != next)
+                {
+                    adjust(mDenseEntities[curr], mDenseEntities[next]);
+                    mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)] = curr;
+
+                    curr = next;
+                    next = mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)];
+                }
             }
         }
 
@@ -207,8 +241,13 @@ namespace ec2s
             mPacked.clear();
         }
 
+        inline void adjust(const Entity lhs, const Entity rhs)
+        {
+            std::swap(mDenseEntities[mSparseIndices[static_cast<std::size_t>(lhs & kEntityIndexMask)]], mDenseEntities[mSparseIndices[static_cast<std::size_t>(rhs & kEntityIndexMask)]]);
+        }
+
         //! actual element's vector
-        std::vector<T> mPacked;
+        std::vector<T, ComponentAllocator> mPacked;
     };
 }  // namespace ec2s
 

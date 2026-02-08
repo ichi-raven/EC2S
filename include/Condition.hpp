@@ -8,9 +8,12 @@
 #ifndef EC2S_CONDITION_HPP_
 #define EC2S_CONDITION_HPP_
 
-#include <type_traits>
 #include <concepts>
+#include <memory>
 #include <tuple>    
+#include <type_traits>
+
+#include "Concepts.hpp"
 
 namespace ec2s
 {
@@ -20,7 +23,8 @@ namespace ec2s
         using type = T;
     };
 
-    template <typename T>
+    template <typename T, typename ComponentAllocator = std::allocator<T>>
+        requires ec2s::Concepts::AllocatorConcept<ComponentAllocator>
     class SparseSet;
 
     template <typename T>
