@@ -9,10 +9,11 @@
 #define EC2S_REGISTRY_HPP_
 
 #include "Condition.hpp"
+#include "Entity.hpp"
+#include "Group.hpp"
+#include "StackAny.hpp"
 #include "SparseSet.hpp"
 #include "View.hpp"
-#include "Entity.hpp"
-#include "StackAny.hpp"
 
 #include <cassert>
 #include <queue>
@@ -306,7 +307,24 @@ namespace ec2s
             return View<decltype(include), decltype(exclude)>(include, exclude);
         }
 
-        /** 
+        template <typename... Args>
+        auto group() -> auto
+        {
+            checkAndAddNewComponent<Args...>();
+
+            auto include = std::tuple_cat(TupleType<Args>{}...);
+
+            static_assert(std::tuple_size_v<decltype(include)> > 1, "Group must include at least two Component type!");
+            iterateTupleAndAssignSparseSet(include);
+
+            // TODO: Record that a Group was created for this ComponentType and prohibit sorting
+            // TODO: Exclusion
+            // TODO: Handling events for adding/removing components of the same type
+
+            return Group<decltype(include)>(include);
+        }
+
+        /**
          * @brief  dump whole SparseSets internals
          * @return dumped result string
          */
@@ -389,8 +407,8 @@ namespace ec2s
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
-                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
-                const TypeHash hash = TypeHasher::hash<ComponentType>();
+                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
                 if (mComponentArrayMap.contains(hash))
                 {
                     std::get<N>(t) = &(mComponentArrayMap[hash].get<SparseSet<ComponentType>>());

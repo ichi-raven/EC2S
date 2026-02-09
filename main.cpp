@@ -105,24 +105,24 @@ void parallelTest()
     auto& job4  = threadPool.createJob(checkTask4);
     auto& job5  = threadPool.createJob(checkTask5);
 
-    job1.addChild(job2);
-    job1a.addChild(job2);
-    job1.addChild(job2a);
-    job1.addChild(job2b);
-    job2.addChild(job3);
-    job2a.addChild(job3);
-    job3.addChild(job4);
-    job4.addChild(job5);
+    job1.addChild(std::move(job2));
+    job1a.addChild(std::move(job2));
+    job1.addChild(std::move(job2a));
+    job1.addChild(std::move(job2b));
+    job2.addChild(std::move(job3));
+    job2a.addChild(std::move(job3));
+    job3.addChild(std::move(job4));
+    job4.addChild(std::move(job5));
 
     std::cout << "start submitting all jobs...\n";
 
     // submit in random order with independent tasks
     threadPool.submit(independentTask);
     sleepRandomMs();
-    threadPool.submit(job1);
+    threadPool.submit(std::move(job1));
     threadPool.submit(independentTask);
     sleepRandomMs();
-    threadPool.submit(job1a);
+    threadPool.submit(std::move(job1a));
     threadPool.submit(independentTask);
     threadPool.submit(independentTask);
 

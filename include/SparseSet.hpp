@@ -188,6 +188,22 @@ namespace ec2s
             }
         }
 
+        void swap(const Entity left, const Entity right)
+        {
+            const std::size_t leftIndex = static_cast<std::size_t>(left & kEntityIndexMask);
+            const std::size_t rightIndex = static_cast<std::size_t>(right & kEntityIndexMask);
+            assert((leftIndex < mSparseIndices.size() && rightIndex < mSparseIndices.size()) || !"accessed by invalid entity!");
+            if (left == right)
+            {
+                return;
+            }
+            
+            std::swap(mPacked[mSparseIndices[leftIndex]], mPacked[mSparseIndices[rightIndex]]);
+            std::swap(mDenseEntities[mSparseIndices[leftIndex]], mDenseEntities[mSparseIndices[rightIndex]]);
+            mSparseIndices[leftIndex] = mSparseIndices[rightIndex];
+
+        }
+
         template <typename Predicate>
             requires Concepts::Predicate<Predicate, T>
         void sort(Predicate& predicate)
@@ -218,6 +234,11 @@ namespace ec2s
         constexpr TypeHash getPackedTypeHash() const
         {
             return TypeHasher::hash<T>();
+        }
+
+        std::vector<T, ComponentAllocator>& getPackedVector()
+        {
+            return mPacked;
         }
 
     private:

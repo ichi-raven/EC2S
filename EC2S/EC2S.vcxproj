@@ -136,6 +136,7 @@
     <ClInclude Include="..\include\Application.hpp" />
     <ClInclude Include="..\include\Entity.hpp" />
     <ClInclude Include="..\include\Condition.hpp" />
+    <ClInclude Include="..\include\Group.hpp" />
     <ClInclude Include="..\include\ISparseSet.hpp" />
     <ClInclude Include="..\include\JobSystem.hpp" />
     <ClInclude Include="..\include\Registry.hpp" />

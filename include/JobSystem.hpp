@@ -21,13 +21,18 @@ namespace ec2s
 {
     class Job
     {
-        friend class ThreadPool;
+    private:
 
-    public:
+        friend class ThreadPool;
         Job()  = default;
         ~Job() = default;
 
-        void addChild(Job& child)
+    public:
+
+        Job(const Job&) = delete;
+        Job& operator=(const Job&) = delete;
+
+        void addChild(Job&& child)
         {
             child.isChild = true;
             pChildren.push_back(&child);
@@ -87,7 +92,7 @@ namespace ec2s
             return *pJob;
         }
 
-        void submit(Job& job)
+        void submit(Job&& job)
         {
             std::lock_guard<std::mutex> lock(mMutex);
             Job* pJob = &job;
@@ -288,7 +293,7 @@ namespace ec2s
     };
 
     template <Job1DFunc JobFunc>  // Constrain by concept
-    void parallelFor(uint32_t start, uint32_t end, const JobFunc& job, ThreadPool& threadPool)
+    void parallelFor(uint32_t start, uint32_t end, const JobFunc& jobFunc, ThreadPool& threadPool)
     {
         assert(threadPool.size() > 0);
         assert(end >= start);
@@ -311,11 +316,11 @@ namespace ec2s
             }
 
             threadPool.submit(
-                [chunkStart, chunkEnd, rem, &job]()
+                [chunkStart, chunkEnd, rem, &jobFunc]()
                 {
                     for (uint32_t j = chunkStart; j < chunkEnd; ++j)
                     {
-                        job(j);
+                        jobFunc(j);
                     }
 
                     if (rem == kInvalidRem)
@@ -323,7 +328,7 @@ namespace ec2s
                         return;
                     }
 
-                    job(rem);
+                    jobFunc(rem);
                 });
         }
 
@@ -331,7 +336,7 @@ namespace ec2s
     }
 
     template <Job1DChunkFunc JobFunc>  // Constrain by concept
-    void parallelForChunk(uint32_t start, uint32_t end, const JobFunc& job, ThreadPool& threadPool)
+    void parallelForChunk(uint32_t start, uint32_t end, const JobFunc& jobFunc, ThreadPool& threadPool)
     {
         assert(threadPool.size() > 0);
         assert(end >= start);
@@ -344,7 +349,7 @@ namespace ec2s
         for (uint32_t i = 0; i < threadPool.size(); ++i)
         {
             const uint32_t chunkSize = range / threadPool.size() + (i < remainder ? 1 : 0);
-            threadPool.submit([&job]() { job(now, now + chunkSize); });
+            threadPool.submit([&jobFunc]() { jobFunc(now, now + chunkSize); });
 
             now += chunkSize;
         }
@@ -353,7 +358,7 @@ namespace ec2s
     }
 
     template <Job2DFunc JobFunc>  // Constrain by concept
-    void parallelFor2D(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& job, ThreadPool& threadPool)
+    void parallelFor2D(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& jobFunc, ThreadPool& threadPool)
     {
         assert(threadPool.size() > 0);
         assert(end.first >= start.first && end.second >= start.second);
@@ -377,13 +382,13 @@ namespace ec2s
             }
 
             threadPool.submit(
-                [chunkStartX, chunkEndX, rem, start, end, &job]()
+                [chunkStartX, chunkEndX, rem, start, end, &jobFunc]()
                 {
                     for (uint32_t j = chunkStartX; j < chunkEndX; ++j)
                     {
                         for (uint32_t k = start.second; k < end.second; ++k)
                         {
-                            job(j, k);
+                            jobFunc(j, k);
                         }
                     }
 
@@ -394,7 +399,7 @@ namespace ec2s
 
                     for (uint32_t k = start.second; k < end.second; ++k)
                     {
-                        job(rem, k);
+                        jobFunc(rem, k);
                     }
                 });
         }
@@ -403,7 +408,7 @@ namespace ec2s
     }
 
     template <Job2DChunkFunc JobFunc>  // Constrain by concept
-    void parallelFor2DChunk(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& job, ThreadPool& threadPool)
+    void parallelFor2DChunk(const std::pair<uint32_t, uint32_t> start, const std::pair<uint32_t, uint32_t> end, const JobFunc& jobFunc, ThreadPool& threadPool)
     {
         assert(threadPool.size() > 0);
         assert(end.first >= start.first && end.second >= start.second);
@@ -418,7 +423,7 @@ namespace ec2s
             for (uint32_t i = 0; i < threadPool.size(); ++i)
             {
                 const uint32_t chunkSizeX = rangeX / threadPool.size() + (i < remainderX ? 1 : 0);
-                threadPool.submit([nowX, chunkSizeX, start, end, &job]() { job({ nowX, start.second }, { nowX + chunkSizeX, end.second }); });
+                threadPool.submit([nowX, chunkSizeX, start, end, &jobFunc]() { jobFunc({ nowX, start.second }, { nowX + chunkSizeX, end.second }); });
                 nowX += chunkSizeX;
             }
         }
@@ -429,7 +434,7 @@ namespace ec2s
             for (uint32_t i = 0; i < threadPool.size(); ++i)
             {
                 const uint32_t chunkSizeY = rangeY / threadPool.size() + (i < remainderY ? 1 : 0);
-                threadPool.submit([nowY, chunkSizeY, start, end, &job]() { job({ start.first, nowY }, { end.first, nowY + chunkSizeY }); });
+                threadPool.submit([nowY, chunkSizeY, start, end, &jobFunc]() { jobFunc({ start.first, nowY }, { end.first, nowY + chunkSizeY }); });
                 nowY += chunkSizeY;
             }
         }

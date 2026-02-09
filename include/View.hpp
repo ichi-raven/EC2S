@@ -53,7 +53,7 @@ namespace ec2s
                 {
                     // check Exclude components
                     bool excluded = false;
-                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args != nullptr && args->contains(entity)) || ...); }, mExcludeSparseSets);
+                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args && args->contains(entity)) || ...); }, mExcludeSparseSets);
 
                     if (excluded)
                     {
@@ -82,7 +82,7 @@ namespace ec2s
                 {
                     // check Exclude components
                     bool excluded = false;
-                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args != nullptr && args->contains(entity)) || ...); }, mExcludeSparseSets);
+                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args && args->contains(entity)) || ...); }, mExcludeSparseSets);
 
                     if (excluded)
                     {
