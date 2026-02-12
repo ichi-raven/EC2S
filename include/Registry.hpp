@@ -65,7 +65,7 @@ namespace ec2s
             }
             else
             {
-                rtn = mFreedEntities.front();
+                rtn = spinEntitySlot(mFreedEntities.front());
                 mFreedEntities.pop();
             }
 
@@ -89,7 +89,7 @@ namespace ec2s
                 pSparseSet->remove(entity);
             }
 
-            mFreedEntities.emplace(static_cast<Entity>(entity | (1ull << kEntitySlotShiftWidth)));
+            mFreedEntities.emplace(entity);
         }
 
         /** 
@@ -111,7 +111,7 @@ namespace ec2s
          * @brief  obtains the reference of specified Component of the specified Entity
          *  
          * @param entity Entity to get Component
-         * @return ntity to get Component
+         * @return entity to get Component
          */
         template <typename Component>
         Component& get(const Entity entity)
@@ -193,6 +193,8 @@ namespace ec2s
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
+            // TODO: group check and update
+
             auto& ss = itr->second.get<SparseSet<T>>();
 
             return ss.emplace(entity, args...);
@@ -214,29 +216,48 @@ namespace ec2s
             }
 
             auto& ss = itr->second.get<SparseSet<T>>();
+            // TODO: group check and update
             ss.remove(entity);
         }
 
         template <typename T, typename Predicate>
             requires Concepts::Predicate<Predicate, T>
-        void sort(Predicate predicate)
+        bool sort(Predicate predicate)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            constexpr auto hash = TypeHasher::hash<T>();
+
+            // check group
+            if (mGroupMap.contains(hash))
+            {
+                //assert(!"cannot sort Component included in Group!");
+                return false;
+            }
+
+            auto&& itr = mComponentArrayMap.find(hash);
             if (itr == mComponentArrayMap.end())
             {
-                return;
+                return false;
             }
 
             auto& ss = itr->second.get<SparseSet<T>>();
             ss.sort(predicate);
+            return true;
         }
+
+        // user may want to use View or Group for swapping multiple components
+        //void swap(const Entity left, const Entity right)
+        //{
+        //    for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
+        //    {
+        //        pSparseSet->swap(left, right);
+        //    }
+        //}
 
         /** 
          * @brief  execute the specified function on all components of the specified type (system in ECS)
          *  
          * @tparam T component type
          * @tparam Func function type
-         * @tparam IsEligibleEachFunc Trait to determine if the Func type is correctly callable for the specified Component type
          * @param func system function
          */
         template <typename T, typename Func>
@@ -314,14 +335,14 @@ namespace ec2s
 
             auto include = std::tuple_cat(TupleType<Args>{}...);
 
-            static_assert(std::tuple_size_v<decltype(include)> > 1, "Group must include at least two Component type!");
+            static_assert(std::tuple_size_v<decltype(include)> >= 2, "Group must include at least two Component type!");
             iterateTupleAndAssignSparseSet(include);
 
             // TODO: Record that a Group was created for this ComponentType and prohibit sorting
             // TODO: Exclusion
             // TODO: Handling events for adding/removing components of the same type
 
-            return Group<decltype(include)>(include);
+            return Group<decltype(include)>(*this, include);
         }
 
         /**
@@ -397,6 +418,42 @@ namespace ec2s
             }
         }
 
+        template <typename GroupType, typename Head, typename... Tail>
+        bool checkAndRegisterGroup(GroupType& group)
+        {
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<Head>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<Head>();
+#endif
+            // skip Exclude declaration
+            if constexpr (ExcludeType<Head>)
+            {
+                if constexpr (sizeof...(Tail) > 0)
+                {
+                    return checkAndRegisterGroup<Tail...>();
+                }
+
+                return true;
+            }
+
+            if (mGroupMap.contains(hash))
+            {
+                return false;
+            }
+
+            auto&& itr = mGroupMap.emplace(hash, &group);
+
+            if constexpr (sizeof...(Tail) > 0)
+            {
+                return checkAndRegisterGroup<Tail...>(group);
+            }
+            else
+            {
+                return true;
+            }
+        }
+
         /** 
          * @brief iterate through the tuple and assign SparseSet pointers to each element
          * @warn if specified Component type is not registered, nullptr will be assigned
@@ -431,6 +488,8 @@ namespace ec2s
         using Dummy_t = std::uint32_t;
         //! maps a SparseSet for each Component type to the type hash of the Component type
         std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
+        //! maps a Group for each Component type tuple to the type hash tuple of the Component types
+        std::unordered_map<TypeHash, IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };

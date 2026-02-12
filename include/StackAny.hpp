@@ -144,6 +144,7 @@ namespace ec2s
             {
                 mpDestructor->invoke(mpMemory);
                 delete mpDestructor;
+                mpDestructor = nullptr;
             }
 
             new (mpMemory) T(from);
@@ -169,6 +170,7 @@ namespace ec2s
             {
                 mpDestructor->invoke(mpMemory);
                 delete mpDestructor;
+                mpDestructor = nullptr;
             }
 
             new (mpMemory) T(from);
@@ -188,6 +190,7 @@ namespace ec2s
         T& get()
         {
             static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+            assert(mpDestructor != nullptr || !"accessed empty StackAny!");
 
             if (TypeHasher::hash<T>() != mTypeHash)
             {
@@ -211,6 +214,11 @@ namespace ec2s
             mpDestructor->invoke(mpMemory);
             delete mpDestructor;
             mpDestructor = nullptr;
+        }
+
+        explicit operator bool() const
+        {
+            return mpDestructor != nullptr;
         }
 
     private:

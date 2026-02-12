@@ -8,6 +8,7 @@
 #ifndef EC2S_ISPARSESET_HPP_
 #define EC2S_ISPARSESET_HPP_
 
+#include <optional>
 #include <vector>
 
 #ifndef NDEBUG
@@ -52,9 +53,9 @@ namespace ec2s
          *  
          * @param entity entity that removes element
          */
-        void remove(const Entity entity)
+        void remove(const Entity entity, const std::optional<std::size_t> groupPoint = std::nullopt)
         {
-            auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+            auto index = getEntityIndex<std::size_t>(entity);
 
             if (index >= mSparseIndices.size())
             {
@@ -62,22 +63,65 @@ namespace ec2s
             }
 
             const std::size_t sparseIndex = mSparseIndices[index];
-            if (sparseIndex == kTombstone || (mDenseEntities[sparseIndex] & kEntitySlotMask) != (entity & kEntitySlotMask))
+            if (sparseIndex == kTombstone || getEntitySlot(mDenseEntities[sparseIndex]) != getEntitySlot(entity))
             {
                 return;
             }
 
             // swap-remove (O(1))
-            std::swap(mDenseEntities[sparseIndex], mDenseEntities.back());
-            mSparseIndices[static_cast<std::size_t>(mDenseEntities[sparseIndex] & kEntityIndexMask)] = sparseIndex;
-
-            mDenseEntities.pop_back();
+            if (groupPoint && sparseIndex < groupPoint.value())
+            {
+                // TODO: remove element in group-preserving and update group point
+                
+                // if removing element is in front of groupPoint, move the element at groupPoint - 1 to the removing position
+                //const std::size_t swapIndex = groupPoint.value() - 1;
+                //std::swap(mDenseEntities[sparseIndex], mDenseEntities[swapIndex]);
+                //mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[sparseIndex])] = sparseIndex;
+                //// destruct elements
+            }
+            else
+            {
+                std::swap(mDenseEntities[sparseIndex], mDenseEntities.back());
+                mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[sparseIndex])] = sparseIndex;
+                mDenseEntities.pop_back();
+            }
 
             // destruct elements
             this->removePackedElement(sparseIndex);
 
             // clear index
             mSparseIndices[index] = kTombstone;
+        }
+
+        /**
+         * @brief swap the elements corresponding to the specified entities
+         * 
+         * @param left left entity
+         * @param right right entity
+         */
+        void swap(const Entity left, const Entity right)
+        {
+            auto leftIndex  = getEntityIndex<std::size_t>(left);
+            auto rightIndex = getEntityIndex<std::size_t>(right);
+            if (leftIndex >= mSparseIndices.size() || rightIndex >= mSparseIndices.size())
+            {
+                return;
+            }
+            auto leftSparseIndex  = mSparseIndices[leftIndex];
+            auto rightSparseIndex = mSparseIndices[rightIndex];
+            if (leftSparseIndex == kTombstone || rightSparseIndex == kTombstone ||
+                getEntitySlot(mDenseEntities[leftSparseIndex]) != getEntitySlot(left) ||
+                getEntitySlot(mDenseEntities[rightSparseIndex]) != getEntitySlot(right))
+            {
+                return;
+            }
+
+            std::swap(mDenseEntities[leftSparseIndex], mDenseEntities[rightSparseIndex]);
+            this->swapPackedElements(leftSparseIndex, rightSparseIndex);
+            
+            mSparseIndices[leftIndex]  = rightSparseIndex;
+            mSparseIndices[rightIndex] = leftSparseIndex;
+
         }
 
         /** 
@@ -101,7 +145,7 @@ namespace ec2s
          */
         bool contains(const Entity entity)
         {
-            const auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+            const auto index = getEntityIndex<std::size_t>(entity);
 
             if (index >= mSparseIndices.size())
             {
@@ -110,7 +154,7 @@ namespace ec2s
 
             const std::size_t sparseIndex = mSparseIndices[index];
 
-            return sparseIndex != kTombstone && (mDenseEntities[sparseIndex] & kEntitySlotMask) == (entity & kEntitySlotMask);
+            return sparseIndex != kTombstone && getEntitySlot(mDenseEntities[sparseIndex]) == getEntitySlot(entity);
         }
 
         /** 
@@ -182,6 +226,14 @@ namespace ec2s
          *  
          */
         virtual void clearPackedElement() = 0;
+
+        /**
+         *  @ type-dependent implementation of swapping two elements (left to child classes) 
+         * 
+         * @param leftIndex dense index of left element
+         * @param rightIndex dense index of right element
+         */
+        virtual void swapPackedElements(const std::size_t leftIndex, const std::size_t rightIndex) = 0;
 
         //! sparse index to DenseEntities (mapping from Entity to DenseEntities)
         std::vector<std::size_t> mSparseIndices;

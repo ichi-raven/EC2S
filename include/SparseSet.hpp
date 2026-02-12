@@ -66,7 +66,7 @@ namespace ec2s
         template <typename... Args>
         T& emplace(Entity entity, Args... args)
         {
-            auto index = static_cast<std::size_t>(entity & kEntityIndexMask);
+            auto index = getEntityIndex<size_t>(entity);
 
             if (index >= mSparseIndices.size())
             {
@@ -108,7 +108,7 @@ namespace ec2s
          */
         T& get(const Entity entity)
         {
-            auto index = static_cast<size_t>(entity & kEntityIndexMask);
+            auto index = getEntityIndex<size_t>(entity);
             assert(index < mSparseIndices.size() || !"accessed by invalid entity!");
             auto sparseIndex = mSparseIndices[index];
 
@@ -128,7 +128,7 @@ namespace ec2s
          */
         bool getSparseIndexIfValid(const Entity entity, std::size_t& sparseIndex_out)
         {
-            auto index              = static_cast<size_t>(entity & kEntityIndexMask);
+            auto index              = getEntityIndex<std::size_t>(entity);
             std::size_t sparseIndex = 0;
             if (index >= mSparseIndices.size() || (sparseIndex = mSparseIndices[index]) >= mPacked.size())
             {
@@ -149,7 +149,7 @@ namespace ec2s
          */
         T& getBySparseIndex(std::size_t sparseIndex, [[maybe_unused]] const Entity entity)
         {
-            assert((entity & kEntitySlotMask) == (mDenseEntities[sparseIndex] & kEntitySlotMask) || !"accessed by invalid(deleted) entity!");
+            assert(getEntitySlot(entity) == getEntitySlot(mDenseEntities[sparseIndex]) || !"accessed by invalid(deleted) entity!");
 
             return mPacked[sparseIndex];
         }
@@ -175,7 +175,6 @@ namespace ec2s
          * @brief  system that takes Entity as its first argument
          *  
          * @tparam Func function type
-         * @tparam IsEligibleEachFunc Trait to determine if the Func type and Entity is correctly callable for the specified Component type
          * @param func system function
          */
         template <typename Func>
@@ -188,22 +187,6 @@ namespace ec2s
             }
         }
 
-        void swap(const Entity left, const Entity right)
-        {
-            const std::size_t leftIndex = static_cast<std::size_t>(left & kEntityIndexMask);
-            const std::size_t rightIndex = static_cast<std::size_t>(right & kEntityIndexMask);
-            assert((leftIndex < mSparseIndices.size() && rightIndex < mSparseIndices.size()) || !"accessed by invalid entity!");
-            if (left == right)
-            {
-                return;
-            }
-            
-            std::swap(mPacked[mSparseIndices[leftIndex]], mPacked[mSparseIndices[rightIndex]]);
-            std::swap(mDenseEntities[mSparseIndices[leftIndex]], mDenseEntities[mSparseIndices[rightIndex]]);
-            mSparseIndices[leftIndex] = mSparseIndices[rightIndex];
-
-        }
-
         template <typename Predicate>
             requires Concepts::Predicate<Predicate, T>
         void sort(Predicate& predicate)
@@ -213,15 +196,15 @@ namespace ec2s
             for (std::size_t pos = 0, end = mDenseEntities.size(); pos < end; ++pos)
             {
                 auto curr = pos;
-                auto next = mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)];
+                auto next = mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[curr])];
 
                 while (curr != next)
                 {
                     adjust(mDenseEntities[curr], mDenseEntities[next]);
-                    mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)] = curr;
+                    mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[curr])] = curr;
 
                     curr = next;
-                    next = mSparseIndices[static_cast<std::size_t>(mDenseEntities[curr] & kEntityIndexMask)];
+                    next = mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[curr])];
                 }
             }
         }
@@ -262,9 +245,14 @@ namespace ec2s
             mPacked.clear();
         }
 
+        virtual void swapPackedElements(const std::size_t lhsIndex, const std::size_t rhsIndex) override
+        {
+            std::swap(mPacked[lhsIndex], mPacked[rhsIndex]);
+        }
+
         inline void adjust(const Entity lhs, const Entity rhs)
         {
-            std::swap(mDenseEntities[mSparseIndices[static_cast<std::size_t>(lhs & kEntityIndexMask)]], mDenseEntities[mSparseIndices[static_cast<std::size_t>(rhs & kEntityIndexMask)]]);
+            std::swap(mDenseEntities[mSparseIndices[getEntityIndex<std::size_t>(lhs)]], mDenseEntities[mSparseIndices[getEntityIndex<std::size_t>(rhs)]]);
         }
 
         //! actual element's vector

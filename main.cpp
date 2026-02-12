@@ -74,7 +74,7 @@ void parallelTest()
 {
     ThreadPool threadPool;
 
-    auto sleepRandomMs = []
+    auto sleepRandomMs = []()
     {
         using namespace std::chrono_literals;
 
@@ -86,14 +86,46 @@ void parallelTest()
 
     // ordered parallel tasks with dependencies
 
-    const auto checkTask1      = []() { std::cout << "called 1\n"; };
-    const auto checkTask1a     = []() { std::cout << "called 1a\n"; };
-    const auto checkTask2      = []() { std::cout << "called 2\n"; };
-    const auto checkTask2a     = []() { std::cout << "called 2a\n"; };
-    const auto checkTask2b     = []() { std::cout << "called 2b\n"; };
-    const auto checkTask3      = []() { std::cout << "called 3\n"; };
-    const auto checkTask4      = []() { std::cout << "called 4\n"; };
-    const auto checkTask5      = []() { std::cout << "called 5\n"; };
+    const auto checkTask1 = [&sleepRandomMs]()
+    {
+        std::cout << "called 1\n";
+        sleepRandomMs();
+    };
+    const auto checkTask1a = [&sleepRandomMs]()
+    {
+        std::cout << "called 1a\n";
+        sleepRandomMs();
+    };
+    const auto checkTask2 = [&sleepRandomMs]()
+    {
+        std::cout << "called 2\n";
+        sleepRandomMs();
+    };
+    const auto checkTask2a = [&sleepRandomMs]()
+    {
+        std::cout << "called 2a\n";
+        sleepRandomMs();
+    };
+    const auto checkTask2b = [&sleepRandomMs]()
+    {
+        std::cout << "called 2b\n";
+        sleepRandomMs();
+    };
+    const auto checkTask3 = [&sleepRandomMs]()
+    {
+        std::cout << "called 3\n";
+        sleepRandomMs();
+    };
+    const auto checkTask4 = [&sleepRandomMs]()
+    {
+        std::cout << "called 4\n";
+        sleepRandomMs();
+    };
+    const auto checkTask5 = [&sleepRandomMs]()
+    {
+        std::cout << "called 5\n";
+        sleepRandomMs();
+    };
     const auto independentTask = []() { std::cout << "independent\n"; };
 
     auto& job1  = threadPool.createJob(checkTask1);
@@ -118,7 +150,6 @@ void parallelTest()
 
     // submit in random order with independent tasks
     threadPool.submit(independentTask);
-    sleepRandomMs();
     threadPool.submit(std::move(job1));
     threadPool.submit(independentTask);
     sleepRandomMs();
@@ -184,11 +215,28 @@ void sortTest()
     }
 }
 
+void swapTest()
+{
+    Registry registry;
+    auto entity1 = registry.create();
+    auto entity2 = registry.create();
+    registry.add<int>(entity1, 1);
+    registry.add<int>(entity2, 2);
+    registry.add<double>(entity1, 0.1);
+    registry.add<double>(entity2, 0.2);
+
+    registry.swap(entity1, entity2);
+
+    std::cout << "entity1 int: " << registry.get<int>(entity1) << ", double: " << registry.get<double>(entity1) << "\n";
+    std::cout << "entity2 int: " << registry.get<int>(entity2) << ", double: " << registry.get<double>(entity2) << "\n";
+}
+
 int main()
 {
-    loadTest();
-    parallelTest();
-    sortTest();
+    //loadTest();
+    //parallelTest();
+    //sortTest();
+    swapTest();
 
     return 0;
 }

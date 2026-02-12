@@ -14,12 +14,42 @@
 
 namespace ec2s
 {
-    template <typename ComponentTuple>
-    class Group
+    // type erasure
+    class IGroup
     {
     public:
-        Group(const ComponentTuple& componentTuple)
-            : mComponentTuple(componentTuple)
+        IGroup() = delete;
+
+        /** 
+         * @brief  constructor
+         *  
+         */
+        IGroup(Registry& registry)
+            : mRegistryRef(registry)
+        {
+        }
+
+        /** 
+         * @brief  destructor (virtual)
+         *  
+         */
+        virtual ~IGroup()
+        {
+        }
+
+        // TODO: check added / removed components and update the group accordingly
+
+    private:
+        Registry& mRegistryRef;
+    };
+
+    template <typename ComponentTuple>
+    class Group : public IGroup
+    {
+    public:
+        Group(Registry& registry, const ComponentTuple& componentTuple)
+            : IGroup(registry)
+            , mComponentTuple(componentTuple)
             , mGroupSize(0)
         {
             const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mComponentTuple);
@@ -33,10 +63,16 @@ namespace ec2s
                 }
             }
 
-           /* for (std::size_t i = 0; i < mGroupSize; ++i)
+            /* for (std::size_t i = 0; i < mGroupSize; ++i)
             {
                 std::apply([&included, entity](const auto&... args) { if () }, mComponentTuple);
             }*/
+        }
+
+        virtual ~Group() override
+        {
+            // TODO: remove this group from registry
+
         }
 
         /**
