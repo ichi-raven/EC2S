@@ -30,6 +30,7 @@ namespace ec2s
      */
     class Registry
     {
+
     public:
         /** 
          * @brief  constructor
@@ -320,7 +321,7 @@ namespace ec2s
             auto include = std::tuple_cat(TupleType<Args>{}...);
             auto exclude = std::tuple_cat(ExcludeTupleType<Args>{}...);
 
-            static_assert(std::tuple_size_v<decltype(include)> != 0, "View must include at least one Component type!");
+            static_assert(std::tuple_size_v<decltype(include)> > 0, "View must include at least one Component type!");
 
             iterateTupleAndAssignSparseSet(include);
             iterateTupleAndAssignSparseSet(exclude);
@@ -476,6 +477,27 @@ namespace ec2s
                 }
 
                 iterateTupleAndAssignSparseSet<N + 1>(t);
+            }
+        }
+
+        /** 
+         * @brief  remove Group from registry
+         *  
+         */
+        template <size_t N = 0, typename TupleType>
+        void iterateTupleAndRemoveGroup()
+        {
+            if constexpr (N < std::tuple_size<TupleType>::value)
+            {
+                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+                auto&& itr                = mGroupMap.find(hash);
+                if (itr != mGroupMap.end())
+                {
+                    mGroupMap.erase(itr);
+                }
+
+                iterateTupleAndRemoveGroup<N + 1, TupleType>();
             }
         }
 

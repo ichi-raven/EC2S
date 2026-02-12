@@ -71,8 +71,7 @@ namespace ec2s
 
         virtual ~Group() override
         {
-            // TODO: remove this group from registry
-
+            mRegistryRef.iterateTupleAndRemoveGroup<ComponentTuple>();
         }
 
         /**
@@ -81,7 +80,7 @@ namespace ec2s
          * @param func function object to be executed, lambda expression, etc.
          */
         template <typename Func>
-            requires Concepts::InvocableByContainerElements<Func, IncludeTuple>
+            requires Concepts::InvocableByContainerElements<Func, ComponentTuple>
         void each(Func func)
         {
             auto vectorTuple = ToComponentVectorTuple(std::make_index_sequence<std::tuple_size_v<ComponentTuple>>{});
@@ -98,7 +97,7 @@ namespace ec2s
          * @param func function object to be executed, lambda expression, etc.
          */
         template <typename Func>
-            requires Concepts::InvocableWithEntityByContainerElements<Func, IncludeTuple>
+            requires Concepts::InvocableWithEntityByContainerElements<Func, ComponentTuple>
         void each(Func func)
         {
             auto vectorTuple = ToComponentVectorTuple(std::make_index_sequence<std::tuple_size_v<ComponentTuple>>{});

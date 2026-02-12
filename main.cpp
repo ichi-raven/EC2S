@@ -215,20 +215,34 @@ void sortTest()
     }
 }
 
-void swapTest()
+void groupTest()
 {
-    Registry registry;
-    auto entity1 = registry.create();
-    auto entity2 = registry.create();
-    registry.add<int>(entity1, 1);
-    registry.add<int>(entity2, 2);
-    registry.add<double>(entity1, 0.1);
-    registry.add<double>(entity2, 0.2);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
+    ec2s::Registry registry;
+    std::vector<ec2s::Entity> entities(kTestEntityNum);
 
-    registry.swap(entity1, entity2);
+    for (std::size_t i = 0; i < kTestEntityNum; ++i)
+    {
+        entities[i] = registry.create();
+        registry.add<int>(entities[i], 1);
+        if (i % 2)
+        {
+            registry.add<double>(entities[i], 0.3);
+        }
+        else
+        {
+            registry.add<char>(entities[i], 'a');
+        }
+    }
 
-    std::cout << "entity1 int: " << registry.get<int>(entity1) << ", double: " << registry.get<double>(entity1) << "\n";
-    std::cout << "entity2 int: " << registry.get<int>(entity2) << ", double: " << registry.get<double>(entity2) << "\n";
+    auto group = registry.group<int, double>();
+    group.each([](int& e, double& e2) {
+        e += 1;
+        e2 += 2.;
+        });
+
+    // validation
+
 }
 
 int main()
@@ -236,7 +250,7 @@ int main()
     //loadTest();
     //parallelTest();
     //sortTest();
-    swapTest();
+    groupTest();
 
     return 0;
 }
