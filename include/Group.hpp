@@ -14,6 +14,8 @@
 
 namespace ec2s
 {
+    class Registry;
+
     // type erasure
     class IGroup
     {
@@ -37,9 +39,9 @@ namespace ec2s
         {
         }
 
+    protected:
         // TODO: check added / removed components and update the group accordingly
 
-    private:
         Registry& mRegistryRef;
     };
 
@@ -52,26 +54,26 @@ namespace ec2s
             , mComponentTuple(componentTuple)
             , mGroupSize(0)
         {
+            mRegistryRef.template iterateTupleAndRegisterGroup<ComponentTuple>(this);
+
             const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mComponentTuple);
+
             for (const auto entity : entities)
             {
-                bool included = true;
-                std::apply([&included, entity](const auto&... args) { included = ((args != nullptr && args->contains(entity)) && ...); }, mComponentTuple);
-                if (included)
+                bool includeAll = false;
+                std::apply([&includeAll, entity](const auto&... args) { includeAll = (args->contains(entity) && ...); }, mComponentTuple);
+                if (includeAll)
                 {
+                    // swap with the "mGroupSize"-th element and increment mGroupSize
+                    iterateTupleAndSwap(mComponentTuple, entity, mGroupSize);
                     ++mGroupSize;
                 }
             }
-
-            /* for (std::size_t i = 0; i < mGroupSize; ++i)
-            {
-                std::apply([&included, entity](const auto&... args) { if () }, mComponentTuple);
-            }*/
         }
 
         virtual ~Group() override
         {
-            mRegistryRef.iterateTupleAndRemoveGroup<ComponentTuple>();
+            mRegistryRef.template iterateTupleAndRemoveGroup<ComponentTuple>();
         }
 
         /**
@@ -83,11 +85,9 @@ namespace ec2s
             requires Concepts::InvocableByContainerElements<Func, ComponentTuple>
         void each(Func func)
         {
-            auto vectorTuple = ToComponentVectorTuple(std::make_index_sequence<std::tuple_size_v<ComponentTuple>>{});
-
             for (std::size_t i = 0; i < mGroupSize; ++i)
             {
-                std::apply([&func, i](auto&... args) { func(args[i]...); }, vectorTuple);
+                std::apply([&func, i](auto&... args) { func(args->getPackedVector()[i]...); }, mComponentTuple);
             }
         }
 
@@ -100,13 +100,11 @@ namespace ec2s
             requires Concepts::InvocableWithEntityByContainerElements<Func, ComponentTuple>
         void each(Func func)
         {
-            auto vectorTuple = ToComponentVectorTuple(std::make_index_sequence<std::tuple_size_v<ComponentTuple>>{});
-
             auto entities = std::get<0>(mComponentTuple)->getDenseEntities();
 
             for (std::size_t i = 0; i < mGroupSize; ++i)
             {
-                std::apply([&func, i](auto&... args) { func(entities[i], args[i]...); }, vectorTuple);
+                std::apply([&func, i](auto&... args) { func(entities[i], args->getPackedVector()[i]...); }, mComponentTuple);
             }
         }
 
@@ -130,10 +128,15 @@ namespace ec2s
             return pMinSparseSet->getDenseEntities();
         }
 
-        template <std::size_t... Is>
-        auto ToComponentVectorTuple(std::index_sequence<Is...>)
+        template <size_t N = 0, typename TupleType>
+        void iterateTupleAndSwap(TupleType& t, const Entity target, const std::size_t groupSize)
         {
-            return std::tuple<std::vector<std::tuple_element_t<Is, ComponentTuple>>&...>{ std::get<Is>(mComponentTuple)->getPackedVector()... };
+            if constexpr (N < std::tuple_size<TupleType>::value)
+            {
+                auto* pSparseSet = std::get<N>(t);
+                pSparseSet->swap(target, pSparseSet->getDenseEntities()[groupSize]);
+                iterateTupleAndSwap<N + 1>(t, target, groupSize);
+            }
         }
 
         ComponentTuple mComponentTuple;

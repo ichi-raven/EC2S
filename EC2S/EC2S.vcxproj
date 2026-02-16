@@ -134,6 +134,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Application.hpp" />
+    <ClInclude Include="..\include\ArenaAllocator.hpp" />
     <ClInclude Include="..\include\Entity.hpp" />
     <ClInclude Include="..\include\Condition.hpp" />
     <ClInclude Include="..\include\Group.hpp" />

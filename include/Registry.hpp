@@ -25,11 +25,16 @@
 
 namespace ec2s
 {
+    template <typename T>
+    class Group;
+
     /**
      * @brief  class that ties all components to Entity and executes System
      */
     class Registry
     {
+        template <typename T>
+        friend class Group;
 
     public:
         /** 
@@ -228,7 +233,7 @@ namespace ec2s
             constexpr auto hash = TypeHasher::hash<T>();
 
             // check group
-            if (mGroupMap.contains(hash))
+            if (mpGroupMap.contains(hash))
             {
                 //assert(!"cannot sort Component included in Group!");
                 return false;
@@ -330,20 +335,24 @@ namespace ec2s
         }
 
         template <typename... Args>
-        auto group() -> auto
+        auto group() -> std::optional<Group<decltype(std::tuple_cat(TupleType<Args>{}...))>>
         {
             checkAndAddNewComponent<Args...>();
 
             auto include = std::tuple_cat(TupleType<Args>{}...);
-
             static_assert(std::tuple_size_v<decltype(include)> >= 2, "Group must include at least two Component type!");
-            iterateTupleAndAssignSparseSet(include);
 
-            // TODO: Record that a Group was created for this ComponentType and prohibit sorting
+            if (!checkGroup<Args...>())
+            {
+                // Group with the same Component types already exists
+                return std::nullopt;
+            }
+
+            iterateTupleAndAssignSparseSet(include);
             // TODO: Exclusion
             // TODO: Handling events for adding/removing components of the same type
 
-            return Group<decltype(include)>(*this, include);
+            return std::optional<Group<decltype(include)>>{ std::in_place, *this, include };
         }
 
         /**
@@ -419,8 +428,8 @@ namespace ec2s
             }
         }
 
-        template <typename GroupType, typename Head, typename... Tail>
-        bool checkAndRegisterGroup(GroupType& group)
+        template <typename Head, typename... Tail>
+        bool checkGroup()
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<Head>();
@@ -432,27 +441,28 @@ namespace ec2s
             {
                 if constexpr (sizeof...(Tail) > 0)
                 {
-                    return checkAndRegisterGroup<Tail...>();
+                    return checkGroup<Tail...>();
                 }
 
                 return true;
             }
 
-            if (mGroupMap.contains(hash))
+            if (mpGroupMap.contains(hash))
             {
                 return false;
             }
 
-            auto&& itr = mGroupMap.emplace(hash, &group);
-
             if constexpr (sizeof...(Tail) > 0)
             {
-                return checkAndRegisterGroup<Tail...>(group);
+                return checkGroup<Tail...>();
             }
-            else
-            {
-                return true;
-            }
+
+            return true;
+        }
+
+        void registerGroup(const TypeHash hash, IGroup* pGroup)
+        {
+            mpGroupMap.emplace(hash, pGroup);
         }
 
         /** 
@@ -481,23 +491,34 @@ namespace ec2s
         }
 
         /** 
+         * @brief  register Group to registry
+         *  
+         */
+        template <typename TupleType, size_t N = 0>
+        void iterateTupleAndRegisterGroup(const IGroup* pIGroup)
+        {
+            if constexpr (N < std::tuple_size<TupleType>::value)
+            {
+                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+                mpGroupMap.emplace(hash, pIGroup);
+                iterateTupleAndRegisterGroup<TupleType, N + 1>(pIGroup);
+            }
+        }
+
+        /** 
          * @brief  remove Group from registry
          *  
          */
-        template <size_t N = 0, typename TupleType>
+        template <typename TupleType, size_t N = 0>
         void iterateTupleAndRemoveGroup()
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
                 using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
                 constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
-                auto&& itr                = mGroupMap.find(hash);
-                if (itr != mGroupMap.end())
-                {
-                    mGroupMap.erase(itr);
-                }
-
-                iterateTupleAndRemoveGroup<N + 1, TupleType>();
+                mpGroupMap.erase(hash);
+                iterateTupleAndRemoveGroup<TupleType, N + 1>();
             }
         }
 
@@ -511,7 +532,7 @@ namespace ec2s
         //! maps a SparseSet for each Component type to the type hash of the Component type
         std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
         //! maps a Group for each Component type tuple to the type hash tuple of the Component types
-        std::unordered_map<TypeHash, IGroup*> mpGroupMap;
+        std::unordered_map<TypeHash, const IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };

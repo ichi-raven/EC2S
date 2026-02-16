@@ -217,7 +217,7 @@ void sortTest()
 
 void groupTest()
 {
-    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e1);
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(kTestEntityNum);
 
@@ -235,13 +235,33 @@ void groupTest()
         }
     }
 
-    auto group = registry.group<int, double>();
-    group.each([](int& e, double& e2) {
-        e += 1;
-        e2 += 2.;
-        });
+    {
+        auto group = registry.group<int, double>();
+        group->each(
+            [](int& e, double& e2)
+            {
+                e += 1;
+                e2 += 2.;
+            });
+    }
 
     // validation
+    int index = 0;
+    registry.each<int>([](const Entity entity, int& e) { std::cout << entity << " : " << e << "\n"; });
+    std::cout << "\n";
+    registry.each<double>([](const Entity entity, double& e) { std::cout << entity << " : " << e << "\n"; });
+    std::cout << "\n";
+    registry.each<int, char>([](const Entity entity, int& e, char& e2) { std::cout << entity << " : " << e << ", " << e2 << "\n"; });
+
+    auto group2 = registry.group<int, char>();
+    if (group2)
+    {
+        std::cout << "invalid! group creation succeeded\n";
+    }
+    else
+    {
+        std::cout << "valid! group creation failed\n";
+    }
 
 }
 
