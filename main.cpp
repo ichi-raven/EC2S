@@ -275,7 +275,7 @@ void groupTest()
 void groupPerformanceTest()
 {
     constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
-    constexpr int kTestTime              = static_cast<int>(1e3);
+    constexpr int kTestTime              = static_cast<int>(100);
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(kTestEntityNum);
 
@@ -306,7 +306,7 @@ void groupPerformanceTest()
                 });
         }
         const auto end = std::chrono::steady_clock::now();
-        std::cout << "view time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+        std::cout << "view time: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() * 1e-3 << " ms\n";
     }
 
     // group
@@ -323,7 +323,7 @@ void groupPerformanceTest()
                 });
         }
         const auto end = std::chrono::steady_clock::now();
-        std::cout << "group time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+        std::cout << "group time: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() * 1e-3 << " ms\n";
     }
 }
 
