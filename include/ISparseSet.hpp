@@ -30,7 +30,7 @@ namespace ec2s
     {
     public:
         //! represents invalid index
-        constexpr static std::size_t kTombstone = std::numeric_limits<std::uint32_t>::max();
+        constexpr static std::size_t kTombstone = std::numeric_limits<Entity>::max();
 
         /** 
          * @brief  constructor
@@ -53,7 +53,7 @@ namespace ec2s
          *  
          * @param entity entity that removes element
          */
-        void remove(const Entity entity, const std::optional<std::size_t> groupPoint = std::nullopt)
+        void remove(const Entity entity)
         {
             auto index = getEntityIndex<std::size_t>(entity);
 
@@ -68,23 +68,9 @@ namespace ec2s
                 return;
             }
 
-            // swap-remove (O(1))
-            if (groupPoint && sparseIndex < groupPoint.value())
-            {
-                // TODO: remove element in group-preserving and update group point
-                
-                // if removing element is in front of groupPoint, move the element at groupPoint - 1 to the removing position
-                //const std::size_t swapIndex = groupPoint.value() - 1;
-                //std::swap(mDenseEntities[sparseIndex], mDenseEntities[swapIndex]);
-                //mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[sparseIndex])] = sparseIndex;
-                //// destruct elements
-            }
-            else
-            {
-                std::swap(mDenseEntities[sparseIndex], mDenseEntities.back());
-                mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[sparseIndex])] = sparseIndex;
-                mDenseEntities.pop_back();
-            }
+            std::swap(mDenseEntities[sparseIndex], mDenseEntities.back());
+            mSparseIndices[getEntityIndex<std::size_t>(mDenseEntities[sparseIndex])] = sparseIndex;
+            mDenseEntities.pop_back();
 
             // destruct elements
             this->removePackedElement(sparseIndex);
@@ -109,19 +95,16 @@ namespace ec2s
             }
             auto leftSparseIndex  = mSparseIndices[leftIndex];
             auto rightSparseIndex = mSparseIndices[rightIndex];
-            if (leftSparseIndex == kTombstone || rightSparseIndex == kTombstone ||
-                getEntitySlot(mDenseEntities[leftSparseIndex]) != getEntitySlot(left) ||
-                getEntitySlot(mDenseEntities[rightSparseIndex]) != getEntitySlot(right))
+            if (leftSparseIndex == kTombstone || rightSparseIndex == kTombstone || getEntitySlot(mDenseEntities[leftSparseIndex]) != getEntitySlot(left) || getEntitySlot(mDenseEntities[rightSparseIndex]) != getEntitySlot(right))
             {
                 return;
             }
 
             std::swap(mDenseEntities[leftSparseIndex], mDenseEntities[rightSparseIndex]);
             this->swapPackedElements(leftSparseIndex, rightSparseIndex);
-            
+
             mSparseIndices[leftIndex]  = rightSparseIndex;
             mSparseIndices[rightIndex] = leftSparseIndex;
-
         }
 
         /** 

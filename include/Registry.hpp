@@ -199,11 +199,17 @@ namespace ec2s
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
-            // TODO: group check and update
-
             auto& ss = itr->second.get<SparseSet<T>>();
 
-            return ss.emplace(entity, args...);
+            ss.emplace(entity, args...);
+
+            // TODO: group check and update
+            if (auto&& groupItr = mpGroupMap.find(hash); groupItr != mpGroupMap.end())
+            {
+                groupItr->second->notifyAddedEntity(entity);
+            }
+
+            return ss[entity];
         }
 
         /** 
@@ -215,14 +221,22 @@ namespace ec2s
         template <typename T>
         void remove(const Entity entity)
         {
-            auto&& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            constexpr auto hash = TypeHasher::hash<T>();
+
+            auto&& itr = mComponentArrayMap.find(hash);
             if (itr == mComponentArrayMap.end())
             {
                 return;
             }
 
             auto& ss = itr->second.get<SparseSet<T>>();
+
             // TODO: group check and update
+            if (auto&& groupItr = mpGroupMap.find(hash); groupItr != mpGroupMap.end())
+            {
+                groupItr->second->notifyRemovedEntity(entity);
+            }
+
             ss.remove(entity);
         }
 
@@ -235,7 +249,7 @@ namespace ec2s
             // check group
             if (mpGroupMap.contains(hash))
             {
-                //assert(!"cannot sort Component included in Group!");
+                // cannot sort Component included in Group
                 return false;
             }
 
@@ -249,15 +263,6 @@ namespace ec2s
             ss.sort(predicate);
             return true;
         }
-
-        // user may want to use View or Group for swapping multiple components
-        //void swap(const Entity left, const Entity right)
-        //{
-        //    for (auto& [typeHash, pSparseSet] : mpComponentArrayPairs)
-        //    {
-        //        pSparseSet->swap(left, right);
-        //    }
-        //}
 
         /** 
          * @brief  execute the specified function on all components of the specified type (system in ECS)
@@ -495,7 +500,7 @@ namespace ec2s
          *  
          */
         template <typename TupleType, size_t N = 0>
-        void iterateTupleAndRegisterGroup(const IGroup* pIGroup)
+        void iterateTupleAndRegisterGroup(IGroup* pIGroup)
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
@@ -532,7 +537,7 @@ namespace ec2s
         //! maps a SparseSet for each Component type to the type hash of the Component type
         std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
         //! maps a Group for each Component type tuple to the type hash tuple of the Component types
-        std::unordered_map<TypeHash, const IGroup*> mpGroupMap;
+        std::unordered_map<TypeHash, IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
     };

@@ -28,6 +28,7 @@ namespace ec2s
          */
         IGroup(Registry& registry)
             : mRegistryRef(registry)
+            , mGroupSize(0)
         {
         }
 
@@ -39,10 +40,29 @@ namespace ec2s
         {
         }
 
-    protected:
-        // TODO: check added / removed components and update the group accordingly
+        std::size_t getGroupSize() const
+        {
+            return mGroupSize;
+        }
 
+        void notifyAddedEntity(const Entity entity)
+        {
+            this->checkAddedImpl(entity);
+        }
+
+        void notifyRemovedEntity(const Entity entity)
+        {
+            this->checkRemovedImpl(entity);
+        }
+
+    protected:
+
+        virtual void checkAddedImpl(const Entity entity) = 0;
+        virtual void checkRemovedImpl(const Entity entity) = 0;
+
+        // TODO: check added / removed components and update the group accordingly
         Registry& mRegistryRef;
+        std::size_t mGroupSize;
     };
 
     template <typename ComponentTuple>
@@ -52,7 +72,6 @@ namespace ec2s
         Group(Registry& registry, const ComponentTuple& componentTuple)
             : IGroup(registry)
             , mComponentTuple(componentTuple)
-            , mGroupSize(0)
         {
             mRegistryRef.template iterateTupleAndRegisterGroup<ComponentTuple>(this);
 
@@ -108,6 +127,32 @@ namespace ec2s
             }
         }
 
+    protected:
+
+        virtual void checkAddedImpl(const Entity entity) override
+        {
+            bool includeAll = false;
+            std::apply([&includeAll, entity](const auto&... args) { includeAll = (args->contains(entity) && ...); }, mComponentTuple);
+            if (includeAll)
+            {
+                // swap with the "mGroupSize"-th element and increment mGroupSize
+                iterateTupleAndSwap(mComponentTuple, entity, mGroupSize);
+                ++mGroupSize;
+            }
+        }
+
+        virtual void checkRemovedImpl(const Entity entity) override
+        {
+            bool includeAll = false;
+            std::apply([&includeAll, entity](const auto&... args) { includeAll = (args->contains(entity) && ...); }, mComponentTuple);
+            if (includeAll)
+            {
+                // swap with the "mGroupSize"-th element and increment mGroupSize
+                iterateTupleAndSwap(mComponentTuple, entity, mGroupSize - 1);
+                --mGroupSize;
+            }
+        }
+
     private:
         template <size_t N = 0, typename TupleType>
         const std::vector<Entity>& iterateTupleAndSearchMinSizeSparseSet(TupleType& t, ISparseSet* pMinSparseSet = nullptr)
@@ -140,7 +185,6 @@ namespace ec2s
         }
 
         ComponentTuple mComponentTuple;
-        std::size_t mGroupSize;
     };
 }  // namespace ec2s
 

@@ -235,15 +235,23 @@ void groupTest()
         }
     }
 
+    auto group = registry.group<int, double>();
+    if (!group)
     {
-        auto group = registry.group<int, double>();
-        group->each(
-            [](int& e, double& e2)
-            {
-                e += 1;
-                e2 += 2.;
-            });
+        std::cout << "group creation failed!\n";
+        return;
     }
+
+    const auto added = registry.create<int, double>();
+    registry.get<int>(added) += 1;
+    registry.get<double>(added) += 0.3;
+
+    group->each(
+        [](int& e, double& e2)
+        {
+            e += 1;
+            e2 += 2.;
+        });
 
     // validation
     int index = 0;
@@ -262,7 +270,61 @@ void groupTest()
     {
         std::cout << "valid! group creation failed\n";
     }
+}
 
+void groupPerformanceTest()
+{
+    constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
+    constexpr int kTestTime              = static_cast<int>(1e3);
+    ec2s::Registry registry;
+    std::vector<ec2s::Entity> entities(kTestEntityNum);
+
+    for (std::size_t i = 0; i < kTestEntityNum; ++i)
+    {
+        entities[i] = registry.create();
+        registry.add<int>(entities[i], 1);
+        if (i % 2)
+        {
+            registry.add<double>(entities[i], 0.3);
+        }
+        else
+        {
+            registry.add<char>(entities[i], 'a');
+        }
+    }
+
+    // view
+    {
+        const auto start = std::chrono::steady_clock::now();
+        for (int i = 0; i < kTestTime; ++i)
+        {
+            registry.each<int, double>(
+                [](int& i, double& d)
+                {
+                    i += 1;
+                    d += 0.3;
+                });
+        }
+        const auto end = std::chrono::steady_clock::now();
+        std::cout << "view time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+    }
+
+    // group
+    {
+        const auto start = std::chrono::steady_clock::now();
+        auto group = registry.group<int, double>();
+        for (int i = 0; i < kTestTime; ++i)
+        {
+            group->each(
+                [](int& i, double& d)
+                {
+                    i += 1;
+                    d += 0.3;
+                });
+        }
+        const auto end = std::chrono::steady_clock::now();
+        std::cout << "group time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms\n";
+    }
 }
 
 int main()
@@ -270,7 +332,8 @@ int main()
     //loadTest();
     //parallelTest();
     //sortTest();
-    groupTest();
+    //groupTest();
+    groupPerformanceTest();
 
     return 0;
 }
