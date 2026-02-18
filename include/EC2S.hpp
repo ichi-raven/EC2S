@@ -12,3 +12,4 @@
 #include "Application.hpp"
 #include "JobSystem.hpp"
 #include "TLSFAllocator.hpp"
+#include "ArenaAllocator.hpp"

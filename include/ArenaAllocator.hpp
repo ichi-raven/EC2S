@@ -11,22 +11,27 @@
 #include <algorithm>
 #include <cstddef>
 
+#define EC2S_DEFAULT_CACHE_LINE_SIZE 64
+
 namespace ec2s
 {
     template <size_t kBlockSize = 256>
-    class ArenaAllocator
+    class alignas(EC2S_DEFAULT_CACHE_LINE_SIZE) ArenaAllocator
     {
     public:
         ArenaAllocator(const size_t byteSize) noexcept
-            : mpExternalMemory(nullptr)
+            : mpHead(nullptr)
+            , mpExternalMemory(nullptr)
             , mExternalMemorySize(0)
         {
             reallocate(byteSize);
         }
 
         ArenaAllocator(void* pMemory, const size_t memoryByteSize) noexcept
-            : mpExternalMemory(pMemory)
+            : mpHead(nullptr)
+            , mpExternalMemory(pMemory)
             , mExternalMemorySize(memoryByteSize)
+            , mExternalMemoryCurrentSize(memoryByteSize)
         {
             reallocate(memoryByteSize);
         }
@@ -73,7 +78,11 @@ namespace ec2s
         {
             while (mpHead)
             {
-                delete[] mpHead->pArena;
+                if (!mpExternalMemory)
+                {
+                    delete[] mpHead->pArena;
+                }
+
                 void* tmp = mpHead;
                 mpHead    = mpHead->pNext;
                 delete tmp;
@@ -105,10 +114,11 @@ namespace ec2s
 
         void reset()
         {
-            while (mpHead)
+            auto* pHead = mpHead;
+            while (pHead)
             {
-                mpHead->pCurrentPtr = mpHead->pArena;
-                mpHead              = mpHead->pNext;
+                pHead->pCurrentPtr = pHead->pArena;
+                pHead              = pHead->pNext;
             }
         }
 
@@ -120,14 +130,16 @@ namespace ec2s
 
             if (mpExternalMemory)
             {
-                mpHead         = new (std::nothrow) MemoryBlock();
-                mpHead->pArena = static_cast<std::byte*>(mpExternalMemory);
-                if (mpHead == nullptr || mpHead->pArena == nullptr)
+                mpHead = new (std::nothrow) MemoryBlock();
+                if (mpHead == nullptr || newBlockSize > mExternalMemoryCurrentSize)
                 {
                     // failed to allocate new block
                     mpHead = prevHead;
                     return false;
                 }
+
+                mExternalMemoryCurrentSize -= newBlockSize;
+                mpHead->pArena = static_cast<std::byte*>(mpExternalMemory);
             }
             else
             {
@@ -145,6 +157,7 @@ namespace ec2s
             mpHead->pCurrentPtr = mpHead->pArena;
             mpHead->size        = newBlockSize;
             mpHead->pNext       = prevHead;
+            return true;
         }
 
         struct MemoryBlock
@@ -158,6 +171,7 @@ namespace ec2s
         MemoryBlock* mpHead;
         void* mpExternalMemory;
         size_t mExternalMemorySize;
+        size_t mExternalMemoryCurrentSize;
     };
 
 }  // namespace ec2s
