@@ -536,7 +536,7 @@ namespace ec2s
         using Dummy_t = std::uint32_t;
         //! maps a SparseSet for each Component type to the type hash of the Component type
         std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
-        //! maps a Group for each Component type tuple to the type hash tuple of the Component types
+        //! maps a Group for each Component type tuple to the type hash of the Component type
         std::unordered_map<TypeHash, IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;

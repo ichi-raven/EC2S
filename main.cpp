@@ -30,15 +30,22 @@ void heavyTask()
     registry.each<double>([](double& e) { e += 2.; });
     registry.each<char>([](char& e) { e += 1; });
 
+    registry.each<int, double>(
+        [](int& e, double& e2)
+        {
+            e += 1;
+            e2 += 0.5;
+        });
+
     registry.each<int, Exclude<double>>([]([[maybe_unused]] Entity entity, int& e) { e += 1; });
 
     // validation
     bool succeeded = true;
 
-    registry.each<int, double>([&](int& e, double& e2) { succeeded &= (e == 2); });
+    registry.each<int, double>([&](int& e, double& e2) { succeeded &= (e == 3); });
     registry.each<int, char>([&](int& e, char& e2) { succeeded &= (e == 3); });
 
-    registry.each<double>([&](double& e) { succeeded &= (e == 2.3); });
+    registry.each<double>([&](double& e) { succeeded &= (e == 2.8); });
     registry.each<char>([&](char& e) { succeeded &= (e == 'b'); });
 
     if (!succeeded)
@@ -51,6 +58,8 @@ void loadTest()
 {
     constexpr int kTestTime = static_cast<std::size_t>(1e3);
     ThreadPool threadPool;
+
+    std::cout << "load test with " << threadPool.size() << " threads-----------------------\n";
 
     auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < kTestTime; ++i)
@@ -73,6 +82,8 @@ void loadTest()
 void parallelTest()
 {
     ThreadPool threadPool;
+
+    std::cout << "parallel test with " << threadPool.size() << " threads-----------------------\n";
 
     auto sleepRandomMs = []()
     {
@@ -163,6 +174,8 @@ void parallelTest()
 
 void sortTest()
 {
+    std::cout << "sort test-----------------------\n";
+
     constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e2);
     std::vector<Entity> entities(kTestEntityNum);
 
@@ -221,6 +234,8 @@ void groupTest()
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(kTestEntityNum);
 
+    std::cout << "group test-----------------------\n";
+
     for (std::size_t i = 0; i < kTestEntityNum; ++i)
     {
         entities[i] = registry.create();
@@ -275,9 +290,11 @@ void groupTest()
 void groupPerformanceTest()
 {
     constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e5);
-    constexpr int kTestTime              = static_cast<int>(100);
+    constexpr int kTestTime              = static_cast<int>(1e3);
     ec2s::Registry registry;
     std::vector<ec2s::Entity> entities(kTestEntityNum);
+
+    std::cout << "group performance test-----------------------\n";
 
     for (std::size_t i = 0; i < kTestEntityNum; ++i)
     {
@@ -329,10 +346,10 @@ void groupPerformanceTest()
 
 int main()
 {
-    //loadTest();
-    //parallelTest();
-    //sortTest();
-    //groupTest();
+    loadTest();
+    parallelTest();
+    sortTest();
+    groupTest();
     groupPerformanceTest();
 
     return 0;
