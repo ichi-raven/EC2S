@@ -54,7 +54,7 @@ namespace ec2s
         {
             void writeEndTag()
             {
-                new ((std::byte*)this + getBlockSize() - getEndTagSize()) EndTag(getBlockSize());
+                new (reinterpret_cast<std::byte*>(this) + getBlockSize() - getEndTagSize()) EndTag(getBlockSize());
             }
 
             uint32_t getEndTagSize()
@@ -178,14 +178,9 @@ namespace ec2s
 
         std::byte* allocate(uint32_t size)
         {
-            if (size < 0)
-            {
-                assert(!"invalid allocation size!");
-                return nullptr;
-            }
             if (size < (1ul << kSplitNum))
             {
-                assert(!"too small size!");
+                // too small size
                 size = 1ul << kSplitNum;
             }
 
@@ -291,6 +286,12 @@ namespace ec2s
                 }
 
                 target = mBlockArray[getBlockArrayIndex(FLI, SLI)];
+            }
+
+            if (!target || target->header.used)
+            {
+                // failed to allocate
+                return nullptr;
             }
 
             target->header.used = true;
@@ -540,46 +541,65 @@ namespace ec2s
     class TLSFStdAllocator
     {
     public:
-        using value_type = T;
+        using value_type      = T;
+        using pointer         = T*;
+        using const_pointer   = const T*;
+        using reference       = T&;
+        using const_reference = const T&;
+        using size_type       = std::size_t;
+        using difference_type = std::ptrdiff_t;
 
-        TLSFAllocator<kSplitNum>* backend = nullptr;
+        template <typename U>
+        struct rebind
+        {
+            using other = TLSFStdAllocator<U, kSplitNum>;
+        };
 
-        TLSFStdAllocator() noexcept = default;
-
-        explicit TLSFStdAllocator(TLSFAllocator<kSplitNum>& alloc) noexcept
-            : backend(&alloc)
+        explicit TLSFStdAllocator(TLSFAllocator<kSplitNum>& engine) noexcept
+            : mEngine(&engine)
         {
         }
 
         template <typename U>
-        TLSFStdAllocator(const TLSFStdAllocator<U>& other) noexcept
-            : backend(other.backend)
+        TLSFStdAllocator(const TLSFStdAllocator<U, kSplitNum>& other) noexcept
+            : mEngine(other.mEngine)
         {
         }
 
         T* allocate(std::size_t n)
         {
-            if (!backend) throw std::bad_alloc{};
-            return backend->template allocate<T>(static_cast<uint32_t>(n));
+            if (n == 0) return nullptr;
+
+            void* p = mEngine->allocate(static_cast<uint32_t>(n * sizeof(T)));
+
+            if (!p)
+            {
+                throw std::bad_alloc();
+            }
+            return static_cast<T*>(p);
         }
 
-        void deallocate(T* p, std::size_t) noexcept
+        void deallocate(T* p, std::size_t n) noexcept
         {
-            backend->deallocate(p);
+            if (p)
+            {
+                mEngine->deallocate(p);
+            }
         }
 
         template <typename U>
-        bool operator==(const TLSFStdAllocator<U>& rhs) const noexcept
+        bool operator==(const TLSFStdAllocator<U, kSplitNum>& other) const noexcept
         {
-            return backend == rhs.backend;
+            return mEngine == other.mEngine;
         }
 
         template <typename U>
-        bool operator!=(const TLSFStdAllocator<U>& rhs) const noexcept
+        bool operator!=(const TLSFStdAllocator<U, kSplitNum>& other) const noexcept
         {
-            return backend != rhs.backend;
+            return !(*this == other);
         }
+
+        TLSFAllocator<kSplitNum>* mEngine;
     };
-
 }  // namespace ec2s
 #endif

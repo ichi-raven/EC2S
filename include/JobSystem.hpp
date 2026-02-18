@@ -349,7 +349,7 @@ namespace ec2s
         for (uint32_t i = 0; i < threadPool.size(); ++i)
         {
             const uint32_t chunkSize = range / threadPool.size() + (i < remainder ? 1 : 0);
-            threadPool.submit([&jobFunc]() { jobFunc(now, now + chunkSize); });
+            threadPool.submit([=, &jobFunc]() { jobFunc(now, now + chunkSize); });
 
             now += chunkSize;
         }

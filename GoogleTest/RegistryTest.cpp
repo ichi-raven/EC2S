@@ -7,7 +7,7 @@
  *********************************************************************/
 
 #include <gtest/gtest.h>
-#include "../include/EC2S.hpp"
+#include <Registry.hpp>
 
 #include <chrono>
 

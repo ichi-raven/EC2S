@@ -1,4 +1,4 @@
-#include "include/EC2S.hpp"
+#include <EC2S.hpp>
 
 #include <chrono>
 #include <iostream>
@@ -87,7 +87,7 @@ void test()
             }
         }
 
-        end = std::chrono::high_resolution_clock::now();
+        end     = std::chrono::high_resolution_clock::now();
         elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n\n";
     }
@@ -105,12 +105,12 @@ void test()
         std::cout << "each single component : \n";
         start = std::chrono::high_resolution_clock::now();
 
-        registry.each<A>([](A& e) {e.a += 1; });
-        registry.each<B>([](B& e) {e.b += 2.; });
-        registry.each<C>([](C& e) {e.c += 1; });
+        registry.each<A>([](A& e) { e.a += 1; });
+        registry.each<B>([](B& e) { e.b += 2.; });
+        registry.each<C>([](C& e) { e.c += 1; });
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.;
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -118,9 +118,21 @@ void test()
         std::cout << "check : ";
         bool succeeded = true;
 
-        registry.each<A>([&](A e) {if (e.a != 2)   succeeded = false; });
-        registry.each<B>([&](B e) {if (e.b != 2.3) succeeded = false; });
-        registry.each<C>([&](C e) {if (e.c != 'b') succeeded = false; });
+        registry.each<A>(
+            [&](A e)
+            {
+                if (e.a != 2) succeeded = false;
+            });
+        registry.each<B>(
+            [&](B e)
+            {
+                if (e.b != 2.3) succeeded = false;
+            });
+        registry.each<C>(
+            [&](C e)
+            {
+                if (e.c != 'b') succeeded = false;
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -140,8 +152,8 @@ void test()
             registry.get<A>(entity).a -= 1;
         }
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -149,7 +161,11 @@ void test()
         std::cout << "check : ";
         bool succeeded = true;
 
-        registry.each<A>([&](const A e) {if (e.a != 1)   succeeded = false; });
+        registry.each<A>(
+            [&](const A e)
+            {
+                if (e.a != 1) succeeded = false;
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -162,23 +178,31 @@ void test()
 
     {
         std::cout << "get view (A, C) and each : \n";
-        start = std::chrono::high_resolution_clock::now();
+        start     = std::chrono::high_resolution_clock::now();
         auto view = registry.view<A, C>();
 
         //std::cout << "Component A, C (by view) : \n";
-        view.each([](A& e1, C& e2) {e1.a += static_cast<int>(e2.c); });
+        view.each([](A& e1, C& e2) { e1.a += static_cast<int>(e2.c); });
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.;
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
     {
         std::cout << "check : ";
         bool succeeded = true;
-        auto view = registry.view<A, C>();
+        auto view      = registry.view<A, C>();
 
-        view.each<A>([&](A e){if (e.a != 1 + static_cast<int>('b')){std::cerr << e.a << "\n"; succeeded = false; }});
+        view.each(
+            [&](A& e, C& )
+            {
+                if (e.a != 1 + static_cast<int>('b'))
+                {
+                    std::cerr << e.a << "\n";
+                    succeeded = false;
+                }
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -197,8 +221,8 @@ void test()
             registry.destroy(entity);
         }
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -223,8 +247,8 @@ void test()
             }
         }
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n\n";
     }
 
@@ -240,17 +264,14 @@ void test()
         start = std::chrono::high_resolution_clock::now();
 
         //std::cout << "Component A each : \n";
-        registry.each<A>([&](A& e) 
-            {
-                e.a += 1;
-            });
+        registry.each<A>([&](A& e) { e.a += 1; });
         //std::cout << "Component B each : \n";
-        registry.each<B>([](B& e) {e.b += 2.; });
+        registry.each<B>([](B& e) { e.b += 2.; });
         //std::cout << "Component C each : \n";
-        registry.each<C>([](C& e) {e.c += 1; });
+        registry.each<C>([](C& e) { e.c += 1; });
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.;
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -258,9 +279,21 @@ void test()
         std::cout << "check : ";
         bool succeeded = true;
 
-        registry.each<A>([&](A e) {if (e.a != 2)   succeeded = false; });
-        registry.each<B>([&](B e) {if (e.b != 2.3) succeeded = false; });
-        registry.each<C>([&](C e) {if (e.c != 'b') succeeded = false; });
+        registry.each<A>(
+            [&](A e)
+            {
+                if (e.a != 2) succeeded = false;
+            });
+        registry.each<B>(
+            [&](B e)
+            {
+                if (e.b != 2.3) succeeded = false;
+            });
+        registry.each<C>(
+            [&](C e)
+            {
+                if (e.c != 'b') succeeded = false;
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -280,8 +313,8 @@ void test()
             registry.get<A>(entity).a -= 1;
         }
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
@@ -289,7 +322,15 @@ void test()
         std::cout << "check : ";
         bool succeeded = true;
 
-        registry.each<A>([&](A e) {if (e.a != 1) { std::cerr << "missed val : " << e.a << "\n";  succeeded = false; } });
+        registry.each<A>(
+            [&](A e)
+            {
+                if (e.a != 1)
+                {
+                    std::cerr << "missed val : " << e.a << "\n";
+                    succeeded = false;
+                }
+            });
         if (succeeded)
         {
             std::cout << "OK\n\n";
@@ -302,28 +343,29 @@ void test()
 
     {
         std::cout << "get view (A, C) and each : \n";
-        start = std::chrono::high_resolution_clock::now();
+        start     = std::chrono::high_resolution_clock::now();
         auto view = registry.view<A, C>();
 
         //std::cout << "Component A, C (by view) : \n";
-        view.each([](A& e1, C& e2) {e1.a += static_cast<int>(e2.c); });
+        view.each([](A& e1, C& e2) { e1.a += static_cast<int>(e2.c); });
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.; 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(end - start).count()) / 1000.;
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 
     {
         std::cout << "check : ";
         bool succeeded = true;
-        auto view = registry.view<A, C>();
+        auto view      = registry.view<A, C>();
 
-        view.each<A>([&](A e) 
+        view.each(
+            [&](A e, C)
             {
-                if (e.a != 1 + static_cast<int>('b')) 
+                if (e.a != 1 + static_cast<int>('b'))
                 {
-                    std::cerr << e.a << "\n"; 
-                    succeeded = false; 
+                    std::cerr << e.a << "\n";
+                    succeeded = false;
                 }
             });
         if (succeeded)
@@ -344,8 +386,8 @@ void test()
             registry.destroy(entity);
         }
 
-        end = std::chrono::high_resolution_clock::now();
-        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()); 
+        end     = std::chrono::high_resolution_clock::now();
+        elapsed = static_cast<double>(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
         std::cout << "time : " << elapsed << "[ms]\n";
     }
 

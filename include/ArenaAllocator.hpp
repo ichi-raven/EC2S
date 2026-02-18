@@ -8,30 +8,27 @@
 #ifndef EC2S_ARENA_ALLOCATOR_HPP_
 #define EC2S_ARENA_ALLOCATOR_HPP_
 
+#include <algorithm>
 #include <cstddef>
 
 namespace ec2s
 {
-    template <size_t kCacheLineSize = 128>
+    template <size_t kBlockSize = 256>
     class ArenaAllocator
     {
     public:
         ArenaAllocator(const size_t byteSize) noexcept
+            : mpExternalMemory(nullptr)
+            , mExternalMemorySize(0)
         {
-            mpHead              = new MemoryBlock();
-            mpHead->pArena      = new std::byte[byteSize];
-            mpHead->pCurrentPtr = mpHead->pArena;
-            mpHead->size        = byteSize;
-            mpHead->pNext       = nullptr;
+            reallocate(byteSize);
         }
 
-        ArenaAllocator(std::byte* pArena, const size_t memSize) noexcept
+        ArenaAllocator(void* pMemory, const size_t memoryByteSize) noexcept
+            : mpExternalMemory(pMemory)
+            , mExternalMemorySize(memoryByteSize)
         {
-            mpHead              = new MemoryBlock();
-            mpHead->pArena      = pArena;
-            mpHead->pCurrentPtr = mpHead->pArena;
-            mpHead->size        = memSize;
-            mpHead->pNext       = nullptr;
+            reallocate(memoryByteSize);
         }
 
         ArenaAllocator(const ArenaAllocator&)            = delete;
@@ -83,36 +80,71 @@ namespace ec2s
             }
         }
 
+        void* allocate(const size_t numBytes) noexcept
+        {
+            if (mpHead->pCurrentPtr + numBytes > mpHead->pArena + mpHead->size)
+            {
+                if (!reallocate(std::max(kBlockSize, numBytes)))
+                {
+                    // failed to allocate new block
+                    return nullptr;
+                }
+            }
+            void* rtn = mpHead->pCurrentPtr;
+            mpHead->pCurrentPtr += numBytes;
+            return rtn;
+        }
+
         template <typename T>
         T* allocate(const size_t num = 1) noexcept
         {
             const size_t allocSize = sizeof(T) * num;
 
-            if (mpHead->pCurrentPtr + allocSize > mpHead->pArena + mpHead->size)
-            {
-                reallocate(std::max(kCacheLineSize, allocSize));
-            }
-
-            T* rtn = reinterpret_cast<T*>(mpHead->pCurrentPtr);
-            mpHead->pCurrentPtr += allocSize;
-            return rtn;
+            return reinterpret_cast<T*>(allocate(allocSize));
         }
 
-        //void deallocate(void* ptr) noexcept
-        //{
-        //    // do nothing, memory will be released when the allocator is destroyed
-        //}
+        void reset()
+        {
+            while (mpHead)
+            {
+                mpHead->pCurrentPtr = mpHead->pArena;
+                mpHead              = mpHead->pNext;
+            }
+        }
 
     private:
-        void reallocate(const size_t newBlockSize) noexcept
-        {
-            const auto* prevHead = mpHead;
 
-            mpHead               = new MemoryBlock();
-            mpHead->pArena       = new std::byte[newBlockSize];
-            mpHead->pCurrentPtr  = mpHead->pArena;
-            mpHead->size         = newBlockSize;
-            mpHead->pNext        = prevHead;
+        bool reallocate(const size_t newBlockSize) noexcept
+        {
+            auto* prevHead = mpHead;
+
+            if (mpExternalMemory)
+            {
+                mpHead         = new (std::nothrow) MemoryBlock();
+                mpHead->pArena = static_cast<std::byte*>(mpExternalMemory);
+                if (mpHead == nullptr || mpHead->pArena == nullptr)
+                {
+                    // failed to allocate new block
+                    mpHead = prevHead;
+                    return false;
+                }
+            }
+            else
+            {
+                mpHead         = new (std::nothrow) MemoryBlock();
+                mpHead->pArena = new (std::nothrow) std::byte[newBlockSize];
+
+                if (mpHead == nullptr || mpHead->pArena == nullptr)
+                {
+                    // failed to allocate new block
+                    mpHead = prevHead;
+                    return false;
+                }
+            }
+
+            mpHead->pCurrentPtr = mpHead->pArena;
+            mpHead->size        = newBlockSize;
+            mpHead->pNext       = prevHead;
         }
 
         struct MemoryBlock
@@ -124,6 +156,8 @@ namespace ec2s
         };
 
         MemoryBlock* mpHead;
+        void* mpExternalMemory;
+        size_t mExternalMemorySize;
     };
 
 }  // namespace ec2s

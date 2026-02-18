@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "../include/Application.hpp"
+#include <Application.hpp>
 
 // common region class for testing
 class TestCommonRegion
@@ -168,7 +168,7 @@ TEST_F(StateMachineTest, InvalidStateTransition)
     app.init(TestState::Initial);
 
     // test transition to non-existent state
-    EXPECT_DEATH(app.changeState(static_cast<TestState>(999)), "");
+    EXPECT_THROW(app.changeState(static_cast<TestState>(999)), std::bad_function_call);
 }
 
 // test state reset functionality

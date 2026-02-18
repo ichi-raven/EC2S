@@ -1,10 +1,12 @@
-#include "include/EC2S.hpp"
+#include <EC2S.hpp>
 
 #include <iostream>
 #include <chrono>
 #include <random>
 
 using namespace ec2s;
+
+void test();
 
 void heavyTask()
 {
@@ -329,7 +331,7 @@ void groupPerformanceTest()
     // group
     {
         const auto start = std::chrono::steady_clock::now();
-        auto group = registry.group<int, double>();
+        auto group       = registry.group<int, double>();
         for (int i = 0; i < kTestTime; ++i)
         {
             group->each(
@@ -346,6 +348,7 @@ void groupPerformanceTest()
 
 int main()
 {
+    test();
     loadTest();
     parallelTest();
     sortTest();
