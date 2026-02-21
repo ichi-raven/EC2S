@@ -23,8 +23,7 @@ namespace ec2s
         using type = T;
     };
 
-    template <typename T, typename ComponentAllocator = std::allocator<T>>
-        requires ec2s::Concepts::AllocatorConcept<ComponentAllocator>
+    template <typename T>
     class SparseSet;
 
     template <typename T>

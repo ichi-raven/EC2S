@@ -25,6 +25,9 @@ namespace ec2s
     template <typename T, uint32_t kSplitNum = 4>
     class TLSFStdAllocator;
 
+    template <uint32_t kSplitNum = 4>
+    struct TLSFMemoryResource;
+
     template <uint32_t kSplitNum>
     class TLSFAllocator
     {
@@ -151,7 +154,7 @@ namespace ec2s
     public:
         TLSFAllocator() = delete;
 
-        TLSFAllocator(std::byte* mainMemory, uint32_t byteSize)
+        TLSFAllocator(std::byte* const mainMemory, const uint32_t byteSize)
             : mMemory(mainMemory)
             , mMaxSize(byteSize - sizeof(TLSFBlockHeader) - sizeof(uint32_t))
             , mAllSize(byteSize)
@@ -601,5 +604,46 @@ namespace ec2s
 
         TLSFAllocator<kSplitNum>* mEngine;
     };
+
+    template <uint32_t kSplitNum>
+    struct TLSFMemoryResource : public std::pmr::memory_resource
+    {
+        using size_type       = std::size_t;
+        using difference_type = std::ptrdiff_t;
+
+        TLSFMemoryResource() = delete;
+
+        TLSFMemoryResource(TLSFAllocator<kSplitNum>& allocator)
+            : mEngine(allocator)
+        {
+        }
+
+        TLSFMemoryResource(const TLSFMemoryResource&)            = delete;
+        TLSFMemoryResource& operator=(const TLSFMemoryResource&) = delete;
+
+        void* do_allocate(const std::size_t bytes, const std::size_t alignment) override
+        {
+            if (alignment > alignof(std::max_align_t))
+            {
+                throw std::bad_alloc();
+            }
+
+            return static_cast<void*>(mEngine.allocate(static_cast<uint32_t>(bytes)));
+        }
+
+        void do_deallocate(void* p, std::size_t bytes, [[maybe_unused]] std::size_t alignment) override
+        {
+            mEngine.deallocate(p);
+        }
+
+        bool do_is_equal(const memory_resource& other) const noexcept override
+        {
+            return this == &other;
+        }
+
+    private:
+        TLSFAllocator<kSplitNum>& mEngine;
+    };
+
 }  // namespace ec2s
 #endif

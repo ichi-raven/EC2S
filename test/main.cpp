@@ -6,7 +6,7 @@
 
 using namespace ec2s;
 
-void test();
+void test(std::pmr::memory_resource* const pMemoryResource = nullptr);
 
 void heavyTask()
 {
@@ -49,6 +49,12 @@ void heavyTask()
 
     registry.each<double>([&](double& e) { succeeded &= (e == 2.8); });
     registry.each<char>([&](char& e) { succeeded &= (e == 'b'); });
+
+    // deletion test
+    for (std::size_t i = 0; i < kTestEntityNum; ++i)
+    {
+        registry.destroy(entities[i]);
+    }
 
     if (!succeeded)
     {
@@ -346,6 +352,34 @@ void groupPerformanceTest()
     }
 }
 
+void externalAllocatorTest()
+{
+    std::cout << "external allocator test-----------------------\n";
+
+    constexpr size_t memSize = 1024 * 1024;  // 1 MB
+
+    {
+        std::cout << "new_delete_resource test-----------------------\n\n";
+        test(std::pmr::new_delete_resource());
+    }
+
+    {
+        std::cout << "monotonic_buffer_resource test-----------------------\n\n";
+        std::pmr::monotonic_buffer_resource pool(memSize);  // 1 MB buffer
+        test(&pool);
+    }
+
+    {
+        std::cout << "TLSFAllocator test-----------------------\n\n";
+        std::byte* pMainMemory = new std::byte[memSize];
+        TLSFAllocator<> tlsfAllocator(pMainMemory, memSize);  // 1 MB pool
+        TLSFMemoryResource<> tlsfPool(tlsfAllocator);
+        test(&tlsfPool);
+    }
+
+    std::cout << "external allocator test completed\n";
+}
+
 int main()
 {
     test();
@@ -354,6 +388,7 @@ int main()
     sortTest();
     groupTest();
     groupPerformanceTest();
+    externalAllocatorTest();
 
     return 0;
 }

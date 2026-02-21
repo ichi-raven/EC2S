@@ -13,6 +13,7 @@
 #include "Group.hpp"
 #include "StackAny.hpp"
 #include "SparseSet.hpp"
+#include "TLSFAllocator.hpp"
 #include "View.hpp"
 
 #include <cassert>
@@ -41,8 +42,9 @@ namespace ec2s
          * @brief  constructor
          *  
          */
-        Registry()
+        Registry(std::pmr::memory_resource* const pExternalMemoryResource = nullptr)
             : mNextEntity(0)
+            , mpExternalMemoryResource(pExternalMemoryResource)
         {
         }
 
@@ -182,8 +184,7 @@ namespace ec2s
          * @param entity Entity to add Component
          * @param ...args arguments forwarded to the Component constructor
          */
-        template <typename T, typename ComponentAllocator = std::allocator<T>, typename... Args>
-            requires Concepts::AllocatorConcept<ComponentAllocator>
+        template <typename T, typename... Args>
         T& add(const Entity entity, Args... args)
         {
 #ifdef EC2S_CHECK_SYNONYM
@@ -193,9 +194,18 @@ namespace ec2s
 #endif
 
             auto&& itr = mComponentArrayMap.find(hash);
+
             if (itr == mComponentArrayMap.end())
             {
-                itr = mComponentArrayMap.emplace(hash, SparseSet<T, ComponentAllocator>()).first;
+                if (mpExternalMemoryResource)
+                {
+                    itr = mComponentArrayMap.emplace(hash, SparseSet<T>(mpExternalMemoryResource)).first;
+                }
+                else
+                {
+                    itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
+                }
+
                 mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
             }
 
@@ -423,8 +433,16 @@ namespace ec2s
 
             if (!mComponentArrayMap.contains(hash))
             {
-                auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
-                mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
+                if (mpExternalMemoryResource)
+                {
+                    auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>(mpExternalMemoryResource)).first;
+                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
+                }
+                else
+                {
+                    auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
+                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
+                }
             }
 
             if constexpr (sizeof...(Tail) > 0)
@@ -540,6 +558,9 @@ namespace ec2s
         std::unordered_map<TypeHash, IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
         std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
+
+        //! external memory resource (if exists)
+        std::pmr::memory_resource* const mpExternalMemoryResource;
     };
 }  // namespace ec2s
 

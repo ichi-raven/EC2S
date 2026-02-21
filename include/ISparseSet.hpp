@@ -9,7 +9,7 @@
 #define EC2S_ISPARSESET_HPP_
 
 #include <optional>
-#include <vector>
+#include <memory_resource>
 
 #ifndef NDEBUG
 #include <sstream>
@@ -37,6 +37,16 @@ namespace ec2s
          *  
          */
         ISparseSet()
+        {
+        }
+
+        /** 
+         * @brief  constructor with external memory resource
+         *  
+         */
+        ISparseSet(std::pmr::memory_resource* const pMemoryResource)
+            : mSparseIndices(pMemoryResource)
+            , mDenseEntities(pMemoryResource)
         {
         }
 
@@ -165,7 +175,7 @@ namespace ec2s
          *  
          * @return reference to denseEntities
          */
-        const std::vector<Entity>& getDenseEntities() const
+        const std::pmr::vector<Entity>& getDenseEntities() const
         {
             return mDenseEntities;
         }
@@ -219,9 +229,9 @@ namespace ec2s
         virtual void swapPackedElements(const std::size_t leftIndex, const std::size_t rightIndex) = 0;
 
         //! sparse index to DenseEntities (mapping from Entity to DenseEntities)
-        std::vector<std::size_t> mSparseIndices;
+        std::pmr::vector<std::size_t> mSparseIndices;
         //! actual dense Entity
-        std::vector<Entity> mDenseEntities;
+        std::pmr::vector<Entity> mDenseEntities;
     };
 }  // namespace ec2s
 

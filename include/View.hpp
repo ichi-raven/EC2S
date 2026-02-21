@@ -96,7 +96,7 @@ namespace ec2s
 
     private:
         template <size_t N = 0, typename TupleType>
-        const std::vector<Entity>& iterateTupleAndSearchMinSizeSparseSet(TupleType& t, ISparseSet* pMinSparseSet = nullptr)
+        const std::pmr::vector<Entity>& iterateTupleAndSearchMinSizeSparseSet(TupleType& t, ISparseSet* pMinSparseSet = nullptr)
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {

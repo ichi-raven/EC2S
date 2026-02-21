@@ -48,14 +48,14 @@ struct C
     char c;
 };
 
-void test()
+void test(std::pmr::memory_resource* const pMemoryResource = nullptr)
 {
     constexpr std::size_t kTestEntityNum = static_cast<std::size_t>(1e6);
 
     std::chrono::high_resolution_clock::time_point start, end;
     double elapsed = 0;
 
-    ec2s::Registry registry;
+    ec2s::Registry registry(pMemoryResource);
 
     std::vector<ec2s::Entity> entities(kTestEntityNum);
 

@@ -23,8 +23,7 @@ namespace ec2s
      * 
      * @tparam T component type
      */
-    template <typename T, typename ComponentAllocator>  // WARN: default allocator is already defined in "Condition.hpp" for forward declaration
-        requires Concepts::AllocatorConcept<ComponentAllocator>
+    template <typename T>  // WARN: default allocator is already defined in "Condition.hpp" for forward declaration
     class SparseSet : public ISparseSet
     {
     public:
@@ -43,8 +42,9 @@ namespace ec2s
          * @brief  constructor
          *  
          */
-        SparseSet(ComponentAllocator& alloc)
-            : mPacked(alloc)
+        SparseSet(std::pmr::memory_resource* const pMemoryResource)
+            : mPacked(pMemoryResource)
+            , ISparseSet(pMemoryResource)
         {
         }
 
@@ -219,7 +219,7 @@ namespace ec2s
             return TypeHasher::hash<T>();
         }
 
-        std::vector<T, ComponentAllocator>& getPackedVector()
+        std::pmr::vector<T>& getPackedVector()
         {
             return mPacked;
         }
@@ -256,7 +256,7 @@ namespace ec2s
         }
 
         //! actual element's vector
-        std::vector<T, ComponentAllocator> mPacked;
+        std::pmr::vector<T> mPacked;
     };
 }  // namespace ec2s
 

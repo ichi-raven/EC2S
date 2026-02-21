@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <memory_resource>
 
 #define EC2S_DEFAULT_CACHE_LINE_SIZE 64
 
@@ -172,6 +173,47 @@ namespace ec2s
         void* mpExternalMemory;
         size_t mExternalMemorySize;
         size_t mExternalMemoryCurrentSize;
+    };
+
+    template <size_t kBlockSize = 256>
+    struct ArenaMemoryResource : public std::pmr::memory_resource
+    {
+        using size_type       = std::size_t;
+        using difference_type = std::ptrdiff_t;
+
+        ArenaMemoryResource() = delete;
+
+        ArenaMemoryResource(ArenaAllocator<kBlockSize>& allocator)
+            : mEngine(allocator)
+        {
+        }
+
+        ArenaMemoryResource(const ArenaMemoryResource&)           = delete;
+        ArenaMemoryResource& operator=(const ArenaMemoryResource&) = delete;
+
+        void* do_allocate(const std::size_t bytes, const std::size_t alignment) override
+        {
+            if (alignment > alignof(std::max_align_t))
+            {
+                throw std::bad_alloc();
+            }
+
+            return mEngine.allocate(bytes);
+        }
+
+        void do_deallocate(void* p, std::size_t bytes, [[maybe_unused]] std::size_t alignment) override
+        {
+            // do nothing
+            //mEngine.deallocate(p);
+        }
+
+        bool do_is_equal(const memory_resource& other) const noexcept override
+        {
+            return this == &other;
+        }
+
+    private:
+        ArenaAllocator<kBlockSize>& mEngine;
     };
 
 }  // namespace ec2s

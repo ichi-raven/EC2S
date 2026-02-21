@@ -181,3 +181,24 @@ TEST(TLSFStdAllocatorTest, UseWithVector)
     int sum = std::accumulate(vec.begin(), vec.end(), 0);
     EXPECT_EQ(sum, 999 * 1000 / 2);
 }
+
+
+// ============================================================
+// TLSFMemoryResource Tests
+// ============================================================
+
+TEST(TLSFMemoryResourceTest, UseWithPMRVector)
+{
+    constexpr uint32_t kMemorySize = 1024 * 1024;
+    std::vector<std::byte> memory(kMemorySize);
+    TLSFAllocator<> backend(memory.data(), kMemorySize);
+    TLSFMemoryResource<> resource(backend);
+    std::pmr::vector<int> vec(&resource);
+    for (int i = 0; i < 1000; ++i)
+    {
+        vec.push_back(i);
+    }
+    EXPECT_EQ(vec.size(), 1000u);
+    int sum = std::accumulate(vec.begin(), vec.end(), 0);
+    EXPECT_EQ(sum, 999 * 1000 / 2);
+}
