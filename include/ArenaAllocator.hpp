@@ -175,6 +175,7 @@ namespace ec2s
         size_t mExternalMemoryCurrentSize;
     };
 
+    // almost same as std::monotonic_buffer_resource
     template <size_t kBlockSize = 256>
     struct ArenaMemoryResource : public std::pmr::memory_resource
     {

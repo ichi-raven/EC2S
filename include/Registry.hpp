@@ -19,6 +19,7 @@
 #include <cassert>
 #include <queue>
 #include <unordered_map>
+#include <memory_resource>
 
 #ifndef NDEBUG
 #include <sstream>
@@ -44,7 +45,22 @@ namespace ec2s
          */
         Registry(std::pmr::memory_resource* const pExternalMemoryResource = nullptr)
             : mNextEntity(0)
-            , mpExternalMemoryResource(pExternalMemoryResource)
+            , mpEntityMemoryResource(pExternalMemoryResource)
+            , mpComponentMemoryResource(pExternalMemoryResource)
+            , mpRegistryMemoryResource(pExternalMemoryResource)
+        {
+        }
+
+        Registry(std::pmr::memory_resource* const pExternalEntityMemoryResource, std::pmr::memory_resource* const, std::pmr::memory_resource* const pExternalComponentMemoryResource,
+                 std::pmr::memory_resource* const pExternalRegistryMemoryResource)
+            : mNextEntity(0)
+            , mFreedEntities(pExternalRegistryMemoryResource)
+            , mComponentArrayMap(pExternalRegistryMemoryResource)
+            , mpGroupMap(pExternalRegistryMemoryResource)
+            , mpComponentArrayPairs(pExternalRegistryMemoryResource)
+            , mpEntityMemoryResource(pExternalEntityMemoryResource)
+            , mpComponentMemoryResource(pExternalComponentMemoryResource)
+            , mpRegistryMemoryResource(pExternalRegistryMemoryResource)
         {
         }
 
@@ -74,7 +90,7 @@ namespace ec2s
             else
             {
                 rtn = spinEntitySlot(mFreedEntities.front());
-                mFreedEntities.pop();
+                mFreedEntities.pop_front();
             }
 
             if constexpr (sizeof...(Args) > 0)
@@ -97,7 +113,7 @@ namespace ec2s
                 pSparseSet->remove(entity);
             }
 
-            mFreedEntities.emplace(entity);
+            mFreedEntities.emplace_front(entity);
         }
 
         /** 
@@ -111,8 +127,7 @@ namespace ec2s
                 pSparseSet->clear();
             }
 
-            std::queue<Entity> empty;
-            std::swap(mFreedEntities, empty);
+            mFreedEntities.clear();
         }
 
         /** 
@@ -121,16 +136,16 @@ namespace ec2s
          * @param entity Entity to get Component
          * @return entity to get Component
          */
-        template <typename Component>
-        Component& get(const Entity entity)
+        template <typename T>
+        T& get(const Entity entity)
         {
-            return mComponentArrayMap[TypeHasher::hash<Component>()].get<SparseSet<Component>>()[entity];
+            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>()[entity];
         }
 
         /** 
          * @brief  obtains all Entities with the specified Component
          *  
-         * @return 
+         * @return dense entities vector
          */
         template <typename T>
         const std::vector<Entity>& getEntities()
@@ -145,7 +160,7 @@ namespace ec2s
          */
         std::size_t activeEntityNum() const
         {
-            return static_cast<std::size_t>(mNextEntity) - mFreedEntities.size();
+            return static_cast<std::size_t>(getEntityIndex(mNextEntity)) - mFreedEntities.size();
         }
 
         /** 
@@ -157,11 +172,18 @@ namespace ec2s
         template <typename T>
         std::size_t size()
         {
-            if (!mComponentArrayMap.contains(TypeHasher::hash<T>()))
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<T>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<T>();
+#endif
+
+            if (auto&& itr = mComponentArrayMap.find(hash); itr != mComponentArrayMap.end())
             {
-                return 0;
+                return itr->second.get<SparseSet<T>>().size();
             }
-            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().size();
+
+            return 0;
         }
 
         /** 
@@ -173,7 +195,18 @@ namespace ec2s
         template <typename T>
         bool contains(const Entity entity)
         {
-            return mComponentArrayMap.contains(TypeHasher::hash<T>()) && mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().contains(entity);
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<T>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<T>();
+#endif
+
+            if (auto&& itr = mComponentArrayMap.find(hash); itr != mComponentArrayMap.end())
+            {
+                return itr->second.get<SparseSet<T>>().contains(entity);
+            }
+
+            return false;
         }
 
         /** 
@@ -197,9 +230,9 @@ namespace ec2s
 
             if (itr == mComponentArrayMap.end())
             {
-                if (mpExternalMemoryResource)
+                if (mpComponentMemoryResource)
                 {
-                    itr = mComponentArrayMap.emplace(hash, SparseSet<T>(mpExternalMemoryResource)).first;
+                    itr = mComponentArrayMap.emplace(hash, SparseSet<T>(mpComponentMemoryResource, mpEntityMemoryResource)).first;
                 }
                 else
                 {
@@ -231,7 +264,11 @@ namespace ec2s
         template <typename T>
         void remove(const Entity entity)
         {
-            constexpr auto hash = TypeHasher::hash<T>();
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<T>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<T>();
+#endif
 
             auto&& itr = mComponentArrayMap.find(hash);
             if (itr == mComponentArrayMap.end())
@@ -254,7 +291,11 @@ namespace ec2s
             requires Concepts::Predicate<Predicate, T>
         bool sort(Predicate predicate)
         {
-            constexpr auto hash = TypeHasher::hash<T>();
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<T>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<T>();
+#endif
 
             // check group
             if (mpGroupMap.contains(hash))
@@ -433,9 +474,9 @@ namespace ec2s
 
             if (!mComponentArrayMap.contains(hash))
             {
-                if (mpExternalMemoryResource)
+                if (mpComponentMemoryResource)
                 {
-                    auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>(mpExternalMemoryResource)).first;
+                    auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>(mpComponentMemoryResource, mpEntityMemoryResource)).first;
                     mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
                 }
                 else
@@ -498,8 +539,13 @@ namespace ec2s
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
-                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+#ifdef EC2S_CHECK_SYNONYM
+                const TypeHash hash = TypeHasher::hash<ComponentType>();
+#else
                 constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+#endif
+
                 if (mComponentArrayMap.contains(hash))
                 {
                     std::get<N>(t) = &(mComponentArrayMap[hash].get<SparseSet<ComponentType>>());
@@ -522,8 +568,13 @@ namespace ec2s
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
-                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+#ifdef EC2S_CHECK_SYNONYM
+                const TypeHash hash = TypeHasher::hash<ComponentType>();
+#else
                 constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+#endif
+
                 mpGroupMap.emplace(hash, pIGroup);
                 iterateTupleAndRegisterGroup<TupleType, N + 1>(pIGroup);
             }
@@ -538,8 +589,12 @@ namespace ec2s
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
-                using ComponentType     = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, TupleType>>::ComponentType;
+#ifdef EC2S_CHECK_SYNONYM
+                const TypeHash hash = TypeHasher::hash<ComponentType>();
+#else
                 constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+#endif
                 mpGroupMap.erase(hash);
                 iterateTupleAndRemoveGroup<TupleType, N + 1>();
             }
@@ -548,19 +603,21 @@ namespace ec2s
         //! Entity to be created next
         Entity mNextEntity;
         //! destroyed Entity
-        std::queue<Entity> mFreedEntities;
+        std::pmr::deque<Entity> mFreedEntities;
 
         //! Dummy type for calculating the size of SparseSet (meaningless)
         using Dummy_t = std::uint32_t;
         //! maps a SparseSet for each Component type to the type hash of the Component type
-        std::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
+        std::pmr::unordered_map<TypeHash, StackAny<sizeof(SparseSet<Dummy_t>)>> mComponentArrayMap;
         //! maps a Group for each Component type tuple to the type hash of the Component type
-        std::unordered_map<TypeHash, IGroup*> mpGroupMap;
+        std::pmr::unordered_map<TypeHash, IGroup*> mpGroupMap;
         //! pair of SparseSet and Component type hash for each Component type (same as mComponentArrayMap)
-        std::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
+        std::pmr::vector<std::pair<TypeHash, ISparseSet*>> mpComponentArrayPairs;
 
         //! external memory resource (if exists)
-        std::pmr::memory_resource* const mpExternalMemoryResource;
+        std::pmr::memory_resource* const mpEntityMemoryResource;
+        std::pmr::memory_resource* const mpComponentMemoryResource;
+        std::pmr::memory_resource* const mpRegistryMemoryResource;
     };
 }  // namespace ec2s
 
