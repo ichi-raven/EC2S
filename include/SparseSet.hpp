@@ -50,7 +50,7 @@ namespace ec2s
 
         SparseSet(std::pmr::memory_resource* const pComponentMemoryResource, std::pmr::memory_resource* const pEntityMemoryResource)
             : mPacked(pComponentMemoryResource)
-            , ISparseSet(pEntityMemoryResource)
+            , ISparseSet(pEntityMemoryResource, pComponentMemoryResource)
         {
         }
 

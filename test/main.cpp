@@ -380,6 +380,11 @@ void externalAllocatorTest()
     std::cout << "external allocator test completed\n";
 }
 
+void specificExternalAllocatorTest()
+{
+
+}
+
 int main()
 {
     test();

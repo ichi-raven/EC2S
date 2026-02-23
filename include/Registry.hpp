@@ -51,6 +51,10 @@ namespace ec2s
         {
         }
 
+        /** 
+         * @brief  constructor
+         * @detail more specific memory resource injection
+         */
         Registry(std::pmr::memory_resource* const pExternalEntityMemoryResource, std::pmr::memory_resource* const, std::pmr::memory_resource* const pExternalComponentMemoryResource,
                  std::pmr::memory_resource* const pExternalRegistryMemoryResource)
             : mNextEntity(0)

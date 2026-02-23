@@ -50,6 +50,12 @@ namespace ec2s
         {
         }
 
+        ISparseSet(std::pmr::memory_resource* const pSparseMemoryResource, std::pmr::memory_resource* const pDenseMemoryResource)
+            : mSparseIndices(pSparseMemoryResource)
+            , mDenseEntities(pDenseMemoryResource)
+        {
+        }
+
         /** 
          * @brief  destructor (virtual)
          *  
