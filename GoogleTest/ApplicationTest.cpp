@@ -95,7 +95,7 @@ public:
 };
 
 // test fixture for state machine tests
-class StateMachineTest : public ::testing::Test
+class ApplicationTest : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -110,7 +110,7 @@ protected:
 };
 
 // test basic state transitions
-TEST_F(StateMachineTest, BasicStateTransition)
+TEST_F(ApplicationTest, BasicStateTransition)
 {
     app.init(TestState::Initial);
     EXPECT_EQ(app.mpCommonRegion->value, 1);  // check Initial state initialization
@@ -130,7 +130,7 @@ TEST_F(StateMachineTest, BasicStateTransition)
 }
 
 // test state caching functionality
-TEST_F(StateMachineTest, StateCaching)
+TEST_F(ApplicationTest, StateCaching)
 {
     app.init(TestState::Initial);
     EXPECT_EQ(app.mpCommonRegion->value, 1);
@@ -152,7 +152,7 @@ TEST_F(StateMachineTest, StateCaching)
 }
 
 // test adding duplicate states
-TEST_F(StateMachineTest, DuplicateStateAddition)
+TEST_F(ApplicationTest, DuplicateStateAddition)
 {
     // try to add an already existing state
 #ifndef NDEBUG
@@ -163,12 +163,16 @@ TEST_F(StateMachineTest, DuplicateStateAddition)
 }
 
 // test invalid state transitions
-TEST_F(StateMachineTest, InvalidStateTransition)
+TEST_F(ApplicationTest, InvalidStateTransition)
 {
     app.init(TestState::Initial);
 
     // test transition to non-existent state
+#ifdef NDEBUG
     EXPECT_THROW(app.changeState(static_cast<TestState>(999)), std::bad_function_call);
+#else
+    EXPECT_DEATH(app.changeState(static_cast<TestState>(999)), "");
+#endif
 }
 
 // test state reset functionality
@@ -192,7 +196,7 @@ public:
 };
 
 // test application exit functionality
-TEST_F(StateMachineTest, ApplicationExit)
+TEST_F(ApplicationTest, ApplicationExit)
 {
     app.init(TestState::Initial);
 
@@ -206,7 +210,7 @@ TEST_F(StateMachineTest, ApplicationExit)
 }
 
 // test common region accessibility
-TEST_F(StateMachineTest, CommonRegionAccess)
+TEST_F(ApplicationTest, CommonRegionAccess)
 {
     app.init(TestState::Initial);
     EXPECT_NE(app.mpCommonRegion.get(), nullptr);

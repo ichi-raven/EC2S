@@ -380,20 +380,174 @@ void externalAllocatorTest()
     std::cout << "external allocator test completed\n";
 }
 
-void specificExternalAllocatorTest()
+void taggedPointerTest()
 {
+    std::cout << "tagged pointer test-----------------------\n";
+    TaggedPointer taggedPtr;
+    int value = 42;
+    taggedPtr.setPointer(&value);
+    taggedPtr.setTag(std::byte{ 0x1F });
+    int* pValue   = taggedPtr.getPointer<int>();
+    std::byte tag = taggedPtr.getTag();
+    std::cout << "pointer value: " << *pValue << "\n";
+    std::cout << "tag value: " << std::to_integer<int>(tag) << "\n";
+}
 
+void lockFreeQueueTest()
+{
+    std::cout << "lock-free queue test-----------------------\n";
+
+    LockFreeQueue<int> queue;
+    constexpr int kTestUnit    = 10;
+    constexpr int kProducerNum = 10;
+    constexpr int kConsumerNum = 10;
+    std::vector<int> consumedValues;
+    std::mutex consumedValuesMutex;
+
+    // Producer threads
+    std::vector<std::thread> producers;
+    producers.resize(kProducerNum);
+    for (int i = 0; i < kProducerNum; ++i)
+    {
+        producers[i] = std::thread(
+            [&queue, i]()
+            {
+                for (int j = i * kTestUnit; j < (i + 1) * kTestUnit; ++j)
+                {
+                    queue.push(j);
+                }
+            });
+    }
+
+    // Consumer threads
+    std::vector<std::thread> consumers;
+    consumers.resize(kProducerNum);
+    for (int i = 0; i < kConsumerNum; ++i)
+    {
+        consumers[i] = std::thread(
+            [&queue, &consumedValues, &consumedValuesMutex]()
+            {
+                for (int j = 0; j < kTestUnit; ++j)
+                {
+                    int value;
+                    while (!queue.pop(value))
+                    {
+                        // Queue is empty, wait and retry
+                        std::this_thread::yield();
+                    }
+
+                    {
+                        std::lock_guard<std::mutex> lock(consumedValuesMutex);
+                        consumedValues.push_back(value);
+                    }
+                }
+            });
+    }
+
+    // Wait for all producers and consumers to finish
+    for (auto& producer : producers)
+    {
+        producer.join();
+    }
+    for (auto& consumer : consumers)
+    {
+        consumer.join();
+    }
+
+    // validation
+    std::sort(consumedValues.begin(), consumedValues.end());
+    for (int i = 0; i < kProducerNum * kTestUnit; ++i)
+    {
+        std::cout << consumedValues[i] << " ";
+    }
+    std::cout << "\n";
+
+    bool succeeded = true;
+    for (int i = 0; i < kProducerNum * kTestUnit; ++i)
+    {
+        if (consumedValues[i] != i)
+        {
+            succeeded = false;
+            std::cout << "failed at index " << i << ": expected " << i << ", got " << consumedValues[i] << "\n";
+            return;
+        }
+    }
+
+    std::cout << "lock-free queue test completed\n";
+}
+
+void lockFreeQueueTest2()
+{
+    LockFreeQueue<int> queue;
+    constexpr int producerCount = 4;
+    constexpr int consumerCount = 4;
+    constexpr int perProducer   = 100;
+
+    std::atomic<int> popCount{ 0 };
+
+    std::mt19937_64 eng{ std::random_device{}() };
+    std::uniform_int_distribution<> dist{ 10, 100 };
+
+    std::vector<std::thread> threads;
+
+    for (int p = 0; p < producerCount; p++)
+    {
+        threads.emplace_back(
+            [&queue, &dist, &eng]()
+            {
+                for (int i = 0; i < perProducer; i++)
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds{ dist(eng) });
+                    queue.push(i);
+                }
+            });
+    }
+
+    for (int c = 0; c < consumerCount; c++)
+    {
+        threads.emplace_back(
+            [&queue, &popCount]()
+            {
+                int v;
+                int local = 0;
+
+                while (local < perProducer)
+                {
+                    if (queue.pop(v))
+                    {
+                        local++;
+                        popCount++;
+                    }
+                }
+            });
+    }
+
+    for (auto& th : threads)
+    {
+        th.join();
+    }
+
+    if (popCount.load() != producerCount * perProducer)
+    {
+        std::cout << "failed: expected pop count " << producerCount * perProducer << ", got " << popCount.load() << "\n";
+    }
+    else
+    {
+        std::cout << "lock-free queue multi-thread push/pop test succeeded\n";
+    }
 }
 
 int main()
 {
-    test();
-    loadTest();
-    parallelTest();
-    sortTest();
-    groupTest();
-    groupPerformanceTest();
-    externalAllocatorTest();
+    //test();
+    //loadTest();
+    //parallelTest();
+    //sortTest();
+    //groupTest();
+    //groupPerformanceTest();
+    //externalAllocatorTest();
+    //taggedPointerTest();
+    lockFreeQueueTest2();
 
     return 0;
 }

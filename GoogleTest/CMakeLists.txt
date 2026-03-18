@@ -6,7 +6,7 @@ FetchContent_Declare(
     GIT_TAG main
 )
 
-# Windows 対応
+# for Windows
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
@@ -17,7 +17,7 @@ add_executable(UnitTests ${TEST_SOURCES})
 
 target_link_libraries(UnitTests
     PRIVATE
-        MyProject
+        ${EC2S_LIB_NAME}
         gtest
         gtest_main
 )

@@ -158,7 +158,11 @@ TEST_F(RegistryTest, EdgeCases)
     EXPECT_NO_THROW(registry.add<TestCompA>(entity, 2));
 
     // get non-existent component
+#ifndef NDEBUG
+    EXPECT_DEATH(registry.get<TestCompB>(entity), "");
+#else
     EXPECT_ANY_THROW(registry.get<TestCompB>(entity));
+#endif
 
     // destroy non-existent entity
     ec2s::Entity invalidEntity = static_cast<ec2s::Entity>(-1);
