@@ -5,7 +5,7 @@
  * @author ichi-raven
  * @date   November 2024
  *********************************************************************/
-
+ 
 //! forward declaration
 namespace ec2s
 {
@@ -23,7 +23,6 @@ namespace ec2s
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
 #include <unordered_map>
 
 /**

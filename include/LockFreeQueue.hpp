@@ -22,7 +22,7 @@ namespace ec2s
         LockFreeQueue()
             : mpMemoryResource(nullptr)
         {
-            Node* pDummy = allocate(T(), std::byte(42));
+            Node* pDummy = allocate(T(), std::byte(0));
             mpHead.store(TaggedPointer(pDummy));
             mpTail.store(TaggedPointer(pDummy));
         }
@@ -37,6 +37,18 @@ namespace ec2s
 
         LockFreeQueue(const LockFreeQueue&)            = delete;
         LockFreeQueue& operator=(const LockFreeQueue&) = delete;
+
+        ~LockFreeQueue()
+        {
+            // Clean up remaining nodes
+            auto current = mpHead.load().getPointer<Node>();
+            while (current)
+            {
+                auto next = current->pNext.load().getPointer<Node>();
+                deallocate(current);
+                current = next;
+            }
+        }
 
         void push(const T& value)
         {
@@ -87,25 +99,17 @@ namespace ec2s
                     return false;
                 }
 
-                if (head == tail)
+                if (head.getPointer<Node>() == tail.getPointer<Node>())
                 {
-                    mpTail.compare_exchange_weak(tail, TaggedPointer(pNext));
+                    mpTail.compare_exchange_weak(tail, TaggedPointer(pNext, stepTag(tail.getTag())));
                     continue;
                 }
 
                 result = pNext->value;
 
-                if (mpHead.compare_exchange_weak(head, TaggedPointer(pNext)))
+                if (mpHead.compare_exchange_weak(head, TaggedPointer(pNext, stepTag(head.getTag()))))
                 {
-                    if (mpMemoryResource)
-                    {
-                        mpMemoryResource->deallocate(pHeadNode, sizeof(Node));
-                    }
-                    else
-                    {
-                        delete pHeadNode;
-                    }
-
+                    deallocate(pHeadNode);
                     return true;
                 }
             }
@@ -122,7 +126,7 @@ namespace ec2s
         {
             if (mpMemoryResource)
             {
-                Node* pNode = static_cast<Node*>(mpMemoryResource->allocate(sizeof(Node)));
+                Node* pNode = static_cast<Node*>(mpMemoryResource->allocate(sizeof(Node), alignof(Node)));
                 new (pNode) Node{ value, TaggedPointer(nullptr, tag) };
                 return pNode;
             }
@@ -134,9 +138,12 @@ namespace ec2s
 
         inline void deallocate(Node* pNode)
         {
+            // call destructor explicitly
+            pNode->~Node();
+
             if (mpMemoryResource)
             {
-                mpMemoryResource->deallocate(pNode, sizeof(Node));
+                mpMemoryResource->deallocate(pNode, sizeof(Node), alignof(Node));
             }
             else
             {

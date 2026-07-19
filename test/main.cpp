@@ -393,12 +393,156 @@ void taggedPointerTest()
     std::cout << "tag value: " << std::to_integer<int>(tag) << "\n";
 }
 
+void taggedPointerPerformanceTest()
+{
+    constexpr int kTestTime = static_cast<int>(1e8 * 3);
+
+    struct A
+    {
+        virtual void f(int& i) = 0;
+    };
+
+    struct B : public A
+    {
+        void f(int& i) override
+        {
+            i += 1;
+        }
+    };
+
+    struct C : public A
+    {
+        void f(int& i) override
+        {
+            i += 2;
+        }
+    };
+
+    struct D : public A
+    {
+        void f(int& i) override
+        {
+            i += 3;
+        }
+    };
+
+    struct TaggedB
+    {
+        void f(int& i)
+        {
+            i += 1;
+        }
+    };
+
+    struct TaggedC
+    {
+        void f(int& i) 
+        {
+            i += 2;
+        }
+    };
+
+    struct TaggedD
+    {
+        void f(int& i)
+        {
+            i += 3;
+        }
+    };
+
+    std::cout << "tagged pointer performance test-----------------------\n";
+    A* pA = nullptr;
+    B* pB = new B();
+    C* pC = new C();
+    D* pD = new D();
+    TaggedB* pTB = new TaggedB();
+    TaggedC* pTC = new TaggedC();
+    TaggedD* pTD = new TaggedD();
+
+    int dummy  = 0;
+    auto start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTestTime; ++i)
+    {
+        // vtable version
+        switch (i % 3)
+        {
+        case 0:
+            pA = pB;
+            break;
+        case 1:
+            pA = pC;
+            break;
+        case 2:
+            pA = pD;
+            break;
+        }
+
+        pA->f(dummy);
+    }
+    auto end = std::chrono::steady_clock::now();
+
+    std::cout << "vtable access time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() * 1e-6 << " ms\n";
+    // validation
+    if (dummy != kTestTime * 2)
+    {
+        std::cout << "validation failed: expected " << kTestTime * 2 << ", got " << dummy << "\n";
+    }
+
+    // tagged pointer version
+    dummy = 0;
+    TaggedPointer<> taggedPtr;
+    start = std::chrono::steady_clock::now();
+    for (int i = 0; i < kTestTime; ++i)
+    {
+        switch (i % 3)
+        {
+        case 0:
+            taggedPtr = TaggedPointer<>(pTB, std::byte(1));
+            break;
+        case 1:
+            taggedPtr = TaggedPointer<>(pTC, std::byte(2));
+            break;
+        case 2:
+            taggedPtr = TaggedPointer<>(pTD, std::byte(3));
+            break;
+        }
+
+        switch (taggedPtr.getTag())
+        {
+        case std::byte(1):
+            taggedPtr.getPointer<TaggedB>()->f(dummy);
+            break;
+        case std::byte(2):
+            taggedPtr.getPointer<TaggedC>()->f(dummy);
+            break;
+        case std::byte(3):
+            taggedPtr.getPointer<TaggedD>()->f(dummy);
+            break;
+        }
+    }
+    end = std::chrono::steady_clock::now();
+    std::cout << "tagged pointer access time: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() * 1e-6 << " ms\n";
+    // validation
+    if (dummy != kTestTime * 2)
+    {
+        std::cout << "validation failed: expected " << kTestTime * 2 << ", got " << dummy << "\n";
+    }
+
+    delete pB;
+    delete pC;
+    delete pD;
+    delete pTB;
+    delete pTC;
+    delete pTD;
+    std::cout << "tagged pointer performance test completed\n";
+}
+
 void lockFreeQueueTest()
 {
     std::cout << "lock-free queue test-----------------------\n";
 
     LockFreeQueue<int> queue;
-    constexpr int kTestUnit    = 10;
+    constexpr int kTestUnit    = 1000;
     constexpr int kProducerNum = 10;
     constexpr int kConsumerNum = 10;
     std::vector<int> consumedValues;
@@ -476,67 +620,6 @@ void lockFreeQueueTest()
     std::cout << "lock-free queue test completed\n";
 }
 
-void lockFreeQueueTest2()
-{
-    LockFreeQueue<int> queue;
-    constexpr int producerCount = 4;
-    constexpr int consumerCount = 4;
-    constexpr int perProducer   = 100;
-
-    std::atomic<int> popCount{ 0 };
-
-    std::mt19937_64 eng{ std::random_device{}() };
-    std::uniform_int_distribution<> dist{ 10, 100 };
-
-    std::vector<std::thread> threads;
-
-    for (int p = 0; p < producerCount; p++)
-    {
-        threads.emplace_back(
-            [&queue, &dist, &eng]()
-            {
-                for (int i = 0; i < perProducer; i++)
-                {
-                    std::this_thread::sleep_for(std::chrono::milliseconds{ dist(eng) });
-                    queue.push(i);
-                }
-            });
-    }
-
-    for (int c = 0; c < consumerCount; c++)
-    {
-        threads.emplace_back(
-            [&queue, &popCount]()
-            {
-                int v;
-                int local = 0;
-
-                while (local < perProducer)
-                {
-                    if (queue.pop(v))
-                    {
-                        local++;
-                        popCount++;
-                    }
-                }
-            });
-    }
-
-    for (auto& th : threads)
-    {
-        th.join();
-    }
-
-    if (popCount.load() != producerCount * perProducer)
-    {
-        std::cout << "failed: expected pop count " << producerCount * perProducer << ", got " << popCount.load() << "\n";
-    }
-    else
-    {
-        std::cout << "lock-free queue multi-thread push/pop test succeeded\n";
-    }
-}
-
 int main()
 {
     //test();
@@ -547,7 +630,8 @@ int main()
     //groupPerformanceTest();
     //externalAllocatorTest();
     //taggedPointerTest();
-    lockFreeQueueTest2();
+    taggedPointerPerformanceTest();
+    //lockFreeQueueTest();
 
     return 0;
 }

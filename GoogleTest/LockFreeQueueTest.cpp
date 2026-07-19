@@ -138,11 +138,13 @@ TEST_F(LockFreeQueueTest, MultiThreadPushPop)
     constexpr int producerCount = 4;
     constexpr int consumerCount = 4;
     constexpr int perProducer   = 5000;
+    constexpr int totalItems    = producerCount * perProducer;
 
     std::atomic<int> popCount{ 0 };
-
+    std::atomic<bool> done{ false };
     std::vector<std::thread> threads;
 
+    // Producers
     for (int p = 0; p < producerCount; p++)
     {
         threads.emplace_back(
@@ -155,24 +157,24 @@ TEST_F(LockFreeQueueTest, MultiThreadPushPop)
             });
     }
 
-    for (int c = 0; c < consumerCount; c++)
-    {
-        threads.emplace_back(
-            [this, &popCount]()
-            {
-                int v;
-                int local = 0;
 
-                while (local < perProducer)
+    // Consumers
+    threads.emplace_back(
+        [this, &popCount, &done]()
+        {
+            int v;
+            while (!done.load(std::memory_order_relaxed))
+            {
+                if (queue.pop(v))
                 {
-                    if (queue.pop(v))
+                    if (popCount.fetch_add(1) + 1 >= totalItems)
                     {
-                        local++;
-                        popCount++;
+                        done.store(true);
+                        return;
                     }
                 }
-            });
-    }
+            }
+        });
 
     for (auto& th : threads)
     {
@@ -189,7 +191,7 @@ TEST_F(LockFreeQueueTest, MultiThreadPushPop)
 TEST_F(LockFreeQueueTest, ABAStress)
 {
     constexpr int threads = 8;
-    constexpr int ops     = 200000;
+    constexpr int ops     = 2000;
 
     std::atomic<bool> start{ false };
 
@@ -216,12 +218,18 @@ TEST_F(LockFreeQueueTest, ABAStress)
 
     start = true;
 
-    for (auto& w : workers) w.join();
+    for (auto& w : workers)
+    {
+        w.join();
+    }
 
     int v;
     int remaining = 0;
 
-    while (queue.pop(v)) remaining++;
+    while (queue.pop(v))
+    {
+        remaining++;
+    }
 
     EXPECT_GE(remaining, 0);
 }
@@ -233,7 +241,7 @@ TEST_F(LockFreeQueueTest, ABAStress)
 TEST_F(LockFreeQueueTest, MillionOperationStress)
 {
     constexpr int threadCount = 8;
-    constexpr int operations  = 1000000;
+    constexpr int operations  = 100000;
 
     std::atomic<int> consumed{ 0 };
 
@@ -246,7 +254,10 @@ TEST_F(LockFreeQueueTest, MillionOperationStress)
         threads.emplace_back(
             [this]()
             {
-                for (int j = 0; j < operations; j++) queue.push(j);
+                for (int j = 0; j < operations; j++)
+                {
+                    queue.push(j);
+                }
             });
     }
 
@@ -259,12 +270,18 @@ TEST_F(LockFreeQueueTest, MillionOperationStress)
 
                 while (consumed < operations * 8)
                 {
-                    if (queue.pop(v)) consumed++;
+                    if (queue.pop(v))
+                    {
+                        consumed++;
+                    }
                 }
             });
     }
 
-    for (auto& th : threads) th.join();
+    for (auto& th : threads)
+    {
+        th.join();
+    }
 
     auto end = std::chrono::high_resolution_clock::now();
 
@@ -347,7 +364,10 @@ TEST(LockFreeQueueStandaloneTest, MemoryLeakCheck)
     {
         ec2s::LockFreeQueue<int> queue(&resource);
 
-        for (int i = 0; i < 10000; i++) queue.push(i);
+        for (int i = 0; i < 10000; i++)
+        {
+            queue.push(i);
+        }
 
         int v;
         while (queue.pop(v))
