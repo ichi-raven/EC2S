@@ -143,7 +143,13 @@ namespace ec2s
         template <typename T>
         T& get(const Entity entity)
         {
-            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>()[entity];
+            return mComponentArrayMap[TypeHasher::hash<T>()].template get<SparseSet<T>>()[entity];
+        }
+
+        template <typename T>
+        const T& get(const Entity entity) const
+        {
+            return mComponentArrayMap.at(TypeHasher::hash<T>()).template get<SparseSet<T>>()[entity];
         }
 
         /** 
@@ -154,7 +160,13 @@ namespace ec2s
         template <typename T>
         const std::vector<Entity>& getEntities()
         {
-            return mComponentArrayMap[TypeHasher::hash<T>()].get<SparseSet<T>>().getDenseEntities();
+            return mComponentArrayMap[TypeHasher::hash<T>()].template get<SparseSet<T>>().getDenseEntities();
+        }
+
+        template <typename T>
+        const std::pmr::vector<Entity>& getEntities() const
+        {
+            return mComponentArrayMap.at(TypeHasher::hash<T>()).template get<SparseSet<T>>().getDenseEntities();
         }
 
         /** 
@@ -174,7 +186,7 @@ namespace ec2s
          * @return the size(num) of the specified Component
          */
         template <typename T>
-        std::size_t size()
+        std::size_t size() const
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
@@ -184,7 +196,7 @@ namespace ec2s
 
             if (auto&& itr = mComponentArrayMap.find(hash); itr != mComponentArrayMap.end())
             {
-                return itr->second.get<SparseSet<T>>().size();
+                return itr->second.template get<SparseSet<T>>().size();
             }
 
             return 0;
@@ -197,7 +209,7 @@ namespace ec2s
          * @return whether the entity has been included
          */
         template <typename T>
-        bool contains(const Entity entity)
+        bool contains(const Entity entity) const
         {
 #ifdef EC2S_CHECK_SYNONYM
             const TypeHash hash = TypeHasher::hash<T>();
@@ -205,9 +217,9 @@ namespace ec2s
             constexpr TypeHash hash = TypeHasher::hash<T>();
 #endif
 
-            if (auto&& itr = mComponentArrayMap.find(hash); itr != mComponentArrayMap.end())
+            if (const auto&& itr = mComponentArrayMap.find(hash); itr != mComponentArrayMap.end())
             {
-                return itr->second.get<SparseSet<T>>().contains(entity);
+                return itr->second.template get<SparseSet<T>>().contains(entity);
             }
 
             return false;
@@ -243,10 +255,10 @@ namespace ec2s
                     itr = mComponentArrayMap.emplace(hash, SparseSet<T>()).first;
                 }
 
-                mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<T>>()));
+                mpComponentArrayPairs.emplace_back(hash, &(itr->second.template get<SparseSet<T>>()));
             }
 
-            auto& ss = itr->second.get<SparseSet<T>>();
+            auto& ss = itr->second.template get<SparseSet<T>>();
 
             ss.emplace(entity, args...);
 
@@ -280,7 +292,7 @@ namespace ec2s
                 return;
             }
 
-            auto& ss = itr->second.get<SparseSet<T>>();
+            auto& ss = itr->second.template get<SparseSet<T>>();
 
             // TODO: group check and update
             if (auto&& groupItr = mpGroupMap.find(hash); groupItr != mpGroupMap.end())
@@ -314,7 +326,7 @@ namespace ec2s
                 return false;
             }
 
-            auto& ss = itr->second.get<SparseSet<T>>();
+            auto& ss = itr->second.template get<SparseSet<T>>();
             ss.sort(predicate);
             return true;
         }
@@ -336,7 +348,21 @@ namespace ec2s
                 return;
             }
 
-            auto& ss = itr->second.get<SparseSet<T>>();
+            auto& ss = itr->second.template get<SparseSet<T>>();
+            ss.each(func);
+        }
+
+        template <typename T, typename Func>
+            requires Concepts::Invocable<Func, const T&>
+        void each(Func func) const
+        {
+            const auto& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
+
+            const auto& ss = itr->second.template get<SparseSet<T>>();
             ss.each(func);
         }
 
@@ -356,7 +382,21 @@ namespace ec2s
                 return;
             }
 
-            auto& ss = itr->second.get<SparseSet<T>>();
+            auto& ss = itr->second.template get<SparseSet<T>>();
+            ss.each(func);
+        }
+
+        template <typename T, typename Func>
+            requires Concepts::InvocableWithEntity<Func, const T&>
+        void each(Func func) const
+        {
+            const auto& itr = mComponentArrayMap.find(TypeHasher::hash<T>());
+            if (itr == mComponentArrayMap.end())
+            {
+                return;
+            }
+
+            const auto& ss = itr->second.template get<SparseSet<T>>();
             ss.each(func);
         }
 
@@ -372,6 +412,12 @@ namespace ec2s
             view<Component1, Component2, OtherComponents...>().each(func);
         }
 
+        template <typename Component1, typename Component2, typename... OtherComponents, typename Func>
+        void each(Func func) const
+        {
+            view<Component1, Component2, OtherComponents...>().each(func);
+        }
+
         /** 
          * @brief  create a View from specified component types
          *  
@@ -379,12 +425,32 @@ namespace ec2s
          * @return created View
          */
         template <typename... Args>
-        auto view() -> auto
+        auto view()
         {
             checkAndAddNewComponent<Args...>();
 
             auto include = std::tuple_cat(TupleType<Args>{}...);
             auto exclude = std::tuple_cat(ExcludeTupleType<Args>{}...);
+
+            static_assert(std::tuple_size_v<decltype(include)> > 0, "View must include at least one Component type!");
+
+            iterateTupleAndAssignSparseSet(include);
+            iterateTupleAndAssignSparseSet(exclude);
+
+            return View<decltype(include), decltype(exclude)>(include, exclude);
+        }
+
+        template <typename... Args>
+        auto view() const
+        {
+            auto include = std::tuple_cat(ConstTupleType<Args>{}...);
+            auto exclude = std::tuple_cat(ConstExcludeTupleType<Args>{}...);
+
+            if (!checkComponent<Args...>())
+            {
+                // return empty view
+                return View<decltype(include), decltype(exclude)>(include, exclude);
+            }
 
             static_assert(std::tuple_size_v<decltype(include)> > 0, "View must include at least one Component type!");
 
@@ -419,7 +485,7 @@ namespace ec2s
          * @brief  dump whole SparseSets internals
          * @return dumped result string
          */
-        std::string dump()
+        std::string dump() const
         {
 #ifndef NDEBUG
             std::ostringstream oss;
@@ -481,12 +547,12 @@ namespace ec2s
                 if (mpComponentMemoryResource)
                 {
                     auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>(mpComponentMemoryResource, mpEntityMemoryResource)).first;
-                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
+                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.template get<SparseSet<Head>>()));
                 }
                 else
                 {
                     auto&& itr = mComponentArrayMap.emplace(hash, SparseSet<Head>()).first;
-                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.get<SparseSet<Head>>()));
+                    mpComponentArrayPairs.emplace_back(hash, &(itr->second.template get<SparseSet<Head>>()));
                 }
             }
 
@@ -494,6 +560,42 @@ namespace ec2s
             {
                 checkAndAddNewComponent<Tail...>();
             }
+        }
+
+        /** 
+         * @brief  check if there is a SparseSet of the specified Component type (if not, return nullptr)
+         *  
+         */
+        template <typename Head, typename... Tail>
+        bool checkComponent() const
+        {
+#ifdef EC2S_CHECK_SYNONYM
+            const TypeHash hash = TypeHasher::hash<Head>();
+#else
+            constexpr TypeHash hash = TypeHasher::hash<Head>();
+#endif
+            // skip Exclude declaration
+            if constexpr (ExcludeType<Head>)
+            {
+                if constexpr (sizeof...(Tail) > 0)
+                {
+                    return checkComponent<Tail...>();
+                }
+
+                return true;
+            }
+
+            if (!mComponentArrayMap.contains(hash))
+            {
+                return false;
+            }
+
+            if constexpr (sizeof...(Tail) > 0)
+            {
+                return checkComponent<Tail...>();
+            }
+
+            return true;
         }
 
         template <typename Head, typename... Tail>
@@ -552,7 +654,33 @@ namespace ec2s
 
                 if (mComponentArrayMap.contains(hash))
                 {
-                    std::get<N>(t) = &(mComponentArrayMap[hash].get<SparseSet<ComponentType>>());
+                    std::get<N>(t) = &(mComponentArrayMap[hash].template get<SparseSet<ComponentType>>());
+                }
+                else
+                {
+                    std::get<N>(t) = nullptr;
+                }
+
+                iterateTupleAndAssignSparseSet<N + 1>(t);
+            }
+        }
+
+        template <size_t N = 0, typename ConstTupleType>
+        void iterateTupleAndAssignSparseSet(ConstTupleType& t) const
+        {
+            if constexpr (N < std::tuple_size<ConstTupleType>::value)
+            {
+                using ComponentType = std::remove_pointer_t<std::tuple_element_t<N, ConstTupleType>>::ComponentType;
+#ifdef EC2S_CHECK_SYNONYM
+                const TypeHash hash = TypeHasher::hash<ComponentType>();
+#else
+                constexpr TypeHash hash = TypeHasher::hash<ComponentType>();
+#endif
+                const auto& itr = mComponentArrayMap.find(hash);
+
+                if (itr != mComponentArrayMap.end())
+                {
+                    std::get<N>(t) = &(itr->second.template get<SparseSet<ComponentType>>());
                 }
                 else
                 {

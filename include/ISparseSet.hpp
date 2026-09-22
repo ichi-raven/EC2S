@@ -142,7 +142,7 @@ namespace ec2s
          * @param entity entity to be checked 
          * @return whether the entity has been included
          */
-        bool contains(const Entity entity)
+        bool contains(const Entity entity) const
         {
             const auto index = getEntityIndex<std::size_t>(entity);
 

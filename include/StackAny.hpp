@@ -200,6 +200,20 @@ namespace ec2s
             return *(reinterpret_cast<T*>(mpMemory));
         }
 
+        template <typename T>
+        const T& get() const
+        {
+            static_assert(sizeof(T) <= kMemSize, "invalid type size!");
+            assert(mpDestructor != nullptr || !"accessed empty StackAny!");
+
+            if (TypeHasher::hash<T>() != mTypeHash)
+            {
+                throw std::exception("invalid type cast (StackAny)!");
+            }
+
+            return *(reinterpret_cast<const T*>(mpMemory));
+        }
+
         /** 
          * @brief  delete and reset stored values and information
          *  

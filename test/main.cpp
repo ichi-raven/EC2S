@@ -624,13 +624,13 @@ int main()
 {
     //test();
     //loadTest();
-    //parallelTest();
+    parallelTest();
     //sortTest();
     //groupTest();
-    //groupPerformanceTest();
-    //externalAllocatorTest();
+    groupPerformanceTest();
+    externalAllocatorTest();
     //taggedPointerTest();
-    taggedPointerPerformanceTest();
+    //taggedPointerPerformanceTest();
     //lockFreeQueueTest();
 
     return 0;

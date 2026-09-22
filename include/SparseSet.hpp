@@ -107,12 +107,30 @@ namespace ec2s
             return mPacked[mSparseIndices[static_cast<size_t>(entity & kEntityIndexMask)]];
         }
 
+        const T& operator[](const Entity entity) const
+        {
+            return mPacked[mSparseIndices[static_cast<size_t>(entity & kEntityIndexMask)]];
+        }
+
         /** 
          * @brief  find the corresponding element from the entity ID
          * @param entity  entity ID
          * @return 
          */
         T& get(const Entity entity)
+        {
+            auto index = getEntityIndex<size_t>(entity);
+            assert(index < mSparseIndices.size() || !"accessed by invalid entity!");
+            auto sparseIndex = mSparseIndices[index];
+
+            assert(sparseIndex < mPacked.size() || !"accessed by invalid(index over) entity!");
+
+            assert((entity & kEntitySlotMask) == (mDenseEntities[sparseIndex] & kEntitySlotMask) || !"accessed by invalid(deleted) entity!");
+
+            return mPacked[sparseIndex];
+        }
+
+        const T& get(const Entity entity) const
         {
             auto index = getEntityIndex<size_t>(entity);
             assert(index < mSparseIndices.size() || !"accessed by invalid entity!");
@@ -177,6 +195,16 @@ namespace ec2s
             }
         }
 
+        template <typename Func>
+            requires Concepts::Invocable<Func, const T&>
+        void each(Func func) const
+        {
+            for (auto& e : mPacked)
+            {
+                func(e);
+            }
+        }
+
         /** 
          * @brief  system that takes Entity as its first argument
          *  
@@ -186,6 +214,16 @@ namespace ec2s
         template <typename Func>
             requires Concepts::InvocableWithEntity<Func, T>
         void each(Func func)
+        {
+            for (std::size_t i = 0; i < mPacked.size(); ++i)
+            {
+                func(mDenseEntities[i], mPacked[i]);
+            }
+        }
+
+        template <typename Func>
+            requires Concepts::InvocableWithEntity<Func, const T&>
+        void each(Func func) const
         {
             for (std::size_t i = 0; i < mPacked.size(); ++i)
             {

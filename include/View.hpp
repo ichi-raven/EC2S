@@ -45,6 +45,42 @@ namespace ec2s
             requires Concepts::InvocableByContainerElements<Func, IncludeTuple>
         void each(Func func)
         {
+            if (std::apply([](const auto*... pSparseSets) { return ((pSparseSets == nullptr) || ...); }, mSparseSets))
+            {
+                // contains nullptr, skip
+                return;
+            }
+
+            const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mSparseSets);
+
+            for (const auto entity : entities)
+            {
+                if constexpr (std::tuple_size_v<ExcludeTuple> != 0)
+                {
+                    // check Exclude components
+                    bool excluded = false;
+                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args && args->contains(entity)) || ...); }, mExcludeSparseSets);
+
+                    if (excluded)
+                    {
+                        continue;
+                    }
+                }
+
+                std::apply([&func, entity](auto&... args) { func(args->get(entity)...); }, mSparseSets);
+            }
+        }
+
+        template <typename Func>
+            requires Concepts::InvocableByContainerElements<Func, IncludeTuple>
+        void each(Func func) const
+        {
+            if (std::apply([](const auto*... pSparseSets) { return ((pSparseSets == nullptr) || ...); }, mSparseSets))
+            {
+                // contains nullptr, skip
+                return;
+            }
+
             const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mSparseSets);
 
             for (const auto entity : entities)
@@ -74,6 +110,42 @@ namespace ec2s
             requires Concepts::InvocableWithEntityByContainerElements<Func, IncludeTuple>
         void each(Func func)
         {
+            if (std::apply([](const auto*... pSparseSets) { return ((pSparseSets == nullptr) || ...); }, mSparseSets))
+            {
+                // contains nullptr, skip
+                return;
+            }
+
+            const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mSparseSets);
+
+            for (const auto entity : entities)
+            {
+                if constexpr (std::tuple_size_v<ExcludeTuple> != 0)
+                {
+                    // check Exclude components
+                    bool excluded = false;
+                    std::apply([&excluded, entity](const auto&... args) { excluded = ((args && args->contains(entity)) || ...); }, mExcludeSparseSets);
+
+                    if (excluded)
+                    {
+                        continue;
+                    }
+                }
+
+                std::apply([&func, entity](auto&... args) { func(entity, args->get(entity)...); }, mSparseSets);
+            }
+        }
+
+        template <typename Func>
+            requires Concepts::InvocableWithEntityByContainerElements<Func, IncludeTuple>
+        void each(Func func) const
+        {
+            if (std::apply([](const auto*... pSparseSets) { return ((pSparseSets == nullptr) || ...); }, mSparseSets))
+            {
+                // contains nullptr, skip
+                return;
+            }
+
             const auto& entities = iterateTupleAndSearchMinSizeSparseSet(mSparseSets);
 
             for (const auto entity : entities)
@@ -96,7 +168,7 @@ namespace ec2s
 
     private:
         template <size_t N = 0, typename TupleType>
-        const std::pmr::vector<Entity>& iterateTupleAndSearchMinSizeSparseSet(TupleType& t, ISparseSet* pMinSparseSet = nullptr)
+        const std::pmr::vector<Entity>& iterateTupleAndSearchMinSizeSparseSet(TupleType& t, const ISparseSet* pMinSparseSet = nullptr) const
         {
             if constexpr (N < std::tuple_size<TupleType>::value)
             {
