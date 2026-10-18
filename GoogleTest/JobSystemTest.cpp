@@ -13,6 +13,9 @@
 #include <thread>
 #include <numeric>
 #include <mutex>
+#include <future>
+#include <memory>
+#include <semaphore>
 
 #include <JobSystem.hpp>
 
@@ -266,4 +269,142 @@ TEST(ThreadPoolStress, ManySmallTasks)
     pool.wait();
 
     EXPECT_EQ(counter.load(), N);
+}
+
+TEST(ThreadPoolCompletion, WaitIncludesJobDestruction)
+{
+    ThreadPool pool(1);
+    std::binary_semaphore run{ 0 };
+    std::binary_semaphore destroying{ 0 };
+    std::binary_semaphore releaseDestruction{ 0 };
+    std::atomic<bool> destroyed{ false };
+
+    auto resource = std::shared_ptr<int>(new int, [&](int* value)
+    {
+        destroying.release();
+        releaseDestruction.acquire();
+        delete value;
+        destroyed = true;
+    });
+    pool.submit([resource, &run] { run.acquire(); });
+    resource.reset();
+    run.release();
+    destroying.acquire();
+
+    std::promise<void> completed;
+    auto completion = completed.get_future();
+    std::thread waiter([&]
+    {
+        pool.wait();
+        completed.set_value();
+    });
+
+    EXPECT_EQ(completion.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
+    releaseDestruction.release();
+    waiter.join();
+    EXPECT_TRUE(destroyed.load());
+    pool.stop();
+}
+
+TEST(ThreadPoolLifecycle, StopKeepsWorkersForDependentJobs)
+{
+    ThreadPool pool(2);
+    std::binary_semaphore parentStarted{ 0 };
+    std::binary_semaphore releaseParent{ 0 };
+    std::counting_semaphore<2> childrenStarted{ 0 };
+    std::counting_semaphore<2> releaseChildren{ 0 };
+    std::atomic<int> executed{ 0 };
+
+    auto& parent = pool.createJob([&]
+    {
+        parentStarted.release();
+        releaseParent.acquire();
+    });
+    const auto childTask = [&]
+    {
+        childrenStarted.release();
+        releaseChildren.acquire();
+        ++executed;
+    };
+    auto& first = pool.createJob(childTask);
+    auto& second = pool.createJob(childTask);
+    parent.addChild(std::move(first));
+    parent.addChild(std::move(second));
+    pool.submit(std::move(parent));
+    parentStarted.acquire();
+
+    std::promise<void> stopped;
+    auto completion = stopped.get_future();
+    std::thread stopper([&]
+    {
+        pool.stop();
+        stopped.set_value();
+    });
+    EXPECT_EQ(completion.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
+    releaseParent.release();
+
+    const bool firstStarted = childrenStarted.try_acquire_for(std::chrono::seconds(1));
+    const bool secondStarted = childrenStarted.try_acquire_for(std::chrono::seconds(1));
+    releaseChildren.release(2);
+    stopper.join();
+
+    EXPECT_TRUE(firstStarted);
+    EXPECT_TRUE(secondStarted);
+    EXPECT_EQ(executed.load(), 2);
+}
+
+TEST(ThreadPoolDependency, SharedDescendantsAcrossSubmissions)
+{
+    ThreadPool pool(4);
+    int firstValue = 0;
+    int secondValue = 0;
+    int result = 0;
+    auto& first = pool.createJob([&] { firstValue = 20; });
+    auto& second = pool.createJob([&] { secondValue = 22; });
+    auto& child = pool.createJob([&] { result = firstValue + secondValue; });
+    first.addChild(std::move(child));
+    second.addChild(std::move(child));
+
+    pool.submit(std::move(first));
+    pool.submit(std::move(second));
+    pool.wait();
+
+    EXPECT_EQ(result, 42);
+}
+
+TEST(ThreadPoolCompletion, RepeatedGraphsWhileAnotherJobIsRunning)
+{
+    ThreadPool pool(2);
+    std::binary_semaphore blockerStarted{ 0 };
+    std::binary_semaphore releaseBlocker{ 0 };
+    std::binary_semaphore childCompleted{ 0 };
+    pool.submit([&]
+    {
+        blockerStarted.release();
+        releaseBlocker.acquire();
+    });
+    blockerStarted.acquire();
+
+    for (int i = 0; i < 256; ++i)
+    {
+        auto& parent = pool.createJob([] {});
+        auto& child = pool.createJob([&] { childCompleted.release(); });
+        parent.addChild(std::move(child));
+        pool.submit(std::move(parent));
+        childCompleted.acquire();
+    }
+
+    std::promise<void> completed;
+    auto completion = completed.get_future();
+    std::thread waiter([&]
+    {
+        pool.wait();
+        completed.set_value();
+    });
+    EXPECT_EQ(completion.wait_for(std::chrono::milliseconds(50)), std::future_status::timeout);
+    releaseBlocker.release();
+    const auto status = completion.wait_for(std::chrono::seconds(2));
+    EXPECT_EQ(status, std::future_status::ready);
+    pool.stop();
+    waiter.join();
 }

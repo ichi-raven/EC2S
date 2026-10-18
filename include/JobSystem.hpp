@@ -9,13 +9,17 @@
 #ifndef EC2S_INCLUDE_JOBSYSTEM_HPP_
 #define EC2S_INCLUDE_JOBSYSTEM_HPP_
 
+#include <algorithm>
+#include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
+#include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 #include <functional>
 #include <cassert>
-#include <unordered_set>
 
 namespace ec2s
 {
@@ -34,7 +38,7 @@ namespace ec2s
 
         void addChild(Job&& child)
         {
-            child.isChild = true;
+            // Finish building the dependency graph before submitting any of its jobs.
             pChildren.push_back(&child);
             child.dependencyCount.fetch_add(1, std::memory_order_relaxed);
         }
@@ -44,21 +48,24 @@ namespace ec2s
         Job* pNext{ nullptr };
         std::atomic_int dependencyCount{ 0 };
         std::vector<Job*> pChildren;
-        bool isChild{ false };
+        bool isSubmitted{ false };
     };
 
+    // Submitted jobs are owned by the pool. Call wait/stop/restart outside worker jobs,
+    // and serialize stop/restart with each other and with submissions.
     class ThreadPool
     {
     public:
         // ThreadPool Public Methods
         explicit ThreadPool(std::optional<size_t> nThreads = std::nullopt)
-            : mStop(false)
+            : mRemainingJobNum(0)
+            , mStop(true)
             , mpJobHead(nullptr)
-            , mRemainingJobNum(0)
         {
             if (!nThreads)
             {
-                nThreads = std::thread::hardware_concurrency() - 1;
+                const auto hardwareThreads = std::thread::hardware_concurrency();
+                nThreads = hardwareThreads > 1 ? hardwareThreads - 1 : 1;
             }
 
             mThreads.resize(std::max(static_cast<size_t>(1u), *nThreads));
@@ -69,14 +76,6 @@ namespace ec2s
         ~ThreadPool()
         {
             stop();
-
-            // Clean up remaining jobs
-            while (mpJobHead != nullptr)
-            {
-                Job* pJob = mpJobHead;
-                mpJobHead = pJob->pNext;
-                delete pJob;
-            }
         }
 
         size_t size() const
@@ -95,107 +94,59 @@ namespace ec2s
         void submit(Job&& job)
         {
             std::lock_guard<std::mutex> lock(mMutex);
-            Job* pJob = &job;
-            if (mpJobHead == nullptr)
+            assert(!mStop);
+            if (job.isSubmitted)
             {
-                mpJobHead = pJob;
-            }
-            else
-            {
-                pJob->pNext = mpJobHead;
-                mpJobHead   = pJob;
+                return;
             }
 
-            int childJobs               = 0;
-            const auto countAllChildren = [&childJobs, this](Job* pJob, const auto& func) -> void
+            const auto registerJob = [this](Job* pJob, const auto& func) -> void
             {
+                if (pJob->isSubmitted)
+                {
+                    return;
+                }
+
+                pJob->isSubmitted = true;
+                ++mRemainingJobNum;
                 for (auto* pChild : pJob->pChildren)
                 {
-                    if (mpSubmittedJobs.contains(pChild))
-                    {
-                        continue;
-                    }
-
-                    mpSubmittedJobs.insert(pChild);
-                    ++childJobs;
                     func(pChild, func);
                 }
             };
-            countAllChildren(&job, countAllChildren);
+            registerJob(&job, registerJob);
 
-            mRemainingJobNum.fetch_add(1 + childJobs, std::memory_order_relaxed);
-
-            cv.notify_one();
+            if (job.dependencyCount.load(std::memory_order_relaxed) == 0)
+            {
+                job.pNext = mpJobHead;
+                mpJobHead = &job;
+                mCv.notify_one();
+            }
         }
 
         void submit(const std::function<void()>& f)
         {
-            std::lock_guard<std::mutex> lock(mMutex);
-
-            Job* pJob   = new Job();
-            pJob->f     = f;
-            pJob->pNext = nullptr;
-
-            if (mpJobHead == nullptr)
-            {
-                mpJobHead = pJob;
-            }
-            else
-            {
-                pJob->pNext = mpJobHead;
-                mpJobHead   = pJob;
-            }
-
-            mRemainingJobNum.fetch_add(1, std::memory_order_relaxed);
-
-            cv.notify_one();
+            submit(std::move(createJob(f)));
         }
 
         void wait()
         {
-            while (mpJobHead != nullptr)
-            {
-                {
-                    std::lock_guard<std::mutex> lock(mMutex);
-                    if (mpJobHead == nullptr)
-                    {
-                        break;  // All jobs are processed
-                    }
-                }
-
-                std::this_thread::yield();
-            }
-
-            while (mRemainingJobNum.load(std::memory_order_acquire) != 0)
-            {
-                std::this_thread::yield();  // Wait until all jobs are done
-            }
-
-            mRemainingJobNum.store(0, std::memory_order_relaxed);
-            mpSubmittedJobs.clear();
+            std::unique_lock<std::mutex> lock(mMutex);
+            mCvCompleted.wait(lock, [this] { return mRemainingJobNum == 0; });
         }
 
         void stop()
         {
             {
                 std::lock_guard<std::mutex> lock(mMutex);
+                if (mStop)
+                {
+                    return;
+                }
                 mStop = true;
             }
 
-            cv.notify_all();
-
-            while (true)
-            {
-                // Double check
-                if (mpJobHead == nullptr)
-                {
-                    std::lock_guard<std::mutex> lock(mMutex);
-                    if (mpJobHead == nullptr)
-                    {
-                        break;  // All jobs are processed
-                    }
-                }
-            }
+            mCv.notify_all();
 
             for (auto& thread : mThreads)
             {
@@ -204,15 +155,19 @@ namespace ec2s
                     thread.join();
                 }
             }
-
-            mRemainingJobNum.store(0, std::memory_order_relaxed);
-            mpSubmittedJobs.clear();
-            mStop = false;
         }
 
         void restart()
         {
             std::lock_guard<std::mutex> lock(mMutex);
+
+            if (!mStop)
+            {
+                return;
+            }
+
+            mStop = false;
+
             for (auto& thread : mThreads)
             {
                 thread = std::thread(&ThreadPool::worker, this);
@@ -225,39 +180,40 @@ namespace ec2s
             while (true)
             {
                 std::unique_lock<std::mutex> lock(mMutex);
-                cv.wait(lock, [this] { return mStop || mpJobHead != nullptr; });
+                mCv.wait(lock, [this] { return mpJobHead != nullptr || (mStop && mRemainingJobNum == 0); });
 
-                if (mStop && mpJobHead == nullptr)
+                if (mpJobHead == nullptr)
                 {
                     return;
                 }
 
                 Job* pJob = mpJobHead;
-                if (pJob == nullptr)
-                {
-                    continue;
-                }
-
                 mpJobHead = pJob->pNext;
 
                 lock.unlock();
 
                 pJob->f();
 
-                mRemainingJobNum.fetch_sub(1, std::memory_order_relaxed);
-
+                lock.lock();
                 for (auto* pChild : pJob->pChildren)
                 {
                     if (pChild->dependencyCount.fetch_sub(1) == 1)
                     {
-                        std::lock_guard<std::mutex> lock(mMutex);
                         pChild->pNext = mpJobHead;
                         mpJobHead     = pChild;
-                        cv.notify_one();
+                        mCv.notify_one();
                     }
                 }
+                lock.unlock();
 
                 delete pJob;
+
+                lock.lock();
+                if (--mRemainingJobNum == 0)
+                {
+                    mCvCompleted.notify_all();
+                    mCv.notify_all();
+                }
             }
         }
 
@@ -265,11 +221,11 @@ namespace ec2s
         // ThreadPool Private Members
         std::vector<std::thread> mThreads;
         mutable std::mutex mMutex;
-        std::atomic_int mRemainingJobNum;
-        std::unordered_set<Job*> mpSubmittedJobs;
+        size_t mRemainingJobNum;
         bool mStop;
         Job* mpJobHead;
-        std::condition_variable cv;
+        std::condition_variable mCv;
+        std::condition_variable mCvCompleted;
     };
 
     template <typename T>
