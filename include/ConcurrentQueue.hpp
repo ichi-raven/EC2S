@@ -71,12 +71,27 @@ namespace ec2s
     class ConcurrentQueue
     {
     public:
+        using ProducerToken = moodycamel::ProducerToken;
+        using ConsumerToken = moodycamel::ConsumerToken;
+
         ConcurrentQueue() = default;
 
         // Initial allocation estimate, not a maximum queue size.
         explicit ConcurrentQueue(std::size_t initialCapacity)
             : mQueue(initialCapacity)
         {
+        }
+
+        // Reuse tokens with this queue only, one thread at a time per token.
+        // Keep the queue alive until its tokens have been destroyed.
+        [[nodiscard]] ProducerToken makeProducerToken()
+        {
+            return ProducerToken(mQueue);
+        }
+
+        [[nodiscard]] ConsumerToken makeConsumerToken()
+        {
+            return ConsumerToken(mQueue);
         }
 
         [[nodiscard]] bool enqueue(const T& value)
@@ -89,9 +104,25 @@ namespace ec2s
             return mQueue.enqueue(std::move(value));
         }
 
+        // Token construction can fail to allocate; an invalid token returns false.
+        [[nodiscard]] bool enqueue(const ProducerToken& token, const T& value)
+        {
+            return token.valid() && mQueue.enqueue(token, value);
+        }
+
+        [[nodiscard]] bool enqueue(const ProducerToken& token, T&& value)
+        {
+            return token.valid() && mQueue.enqueue(token, std::move(value));
+        }
+
         [[nodiscard]] bool try_dequeue(T& result)
         {
             return mQueue.try_dequeue(result);
+        }
+
+        [[nodiscard]] bool try_dequeue(ConsumerToken& token, T& result)
+        {
+            return mQueue.try_dequeue(token, result);
         }
 
     private:

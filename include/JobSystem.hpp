@@ -199,11 +199,12 @@ namespace ec2s
 
         void worker()
         {
+            auto consumerToken = mReadyJobs.makeConsumerToken();
             while (true)
             {
                 mAvailableJobs.acquire();
                 Job* pJob;
-                while (!mReadyJobs.try_dequeue(pJob))
+                while (!mReadyJobs.try_dequeue(consumerToken, pJob))
                 {
                     if (mStop.load(std::memory_order_acquire) && mRemainingJobNum.load(std::memory_order_acquire) == 0)
                     {
@@ -217,7 +218,6 @@ namespace ec2s
         }
 
     private:
-        // ThreadPool Private Members
         std::vector<std::thread> mThreads;
         ConcurrentQueue<Job*> mReadyJobs;
         std::counting_semaphore<> mAvailableJobs{ 0 };

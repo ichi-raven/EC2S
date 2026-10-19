@@ -276,3 +276,185 @@ TEST(ConcurrentQueueTest, MultipleProducersAndConsumers)
     }
     EXPECT_EQ(resource.allocations, resource.deallocations);
 }
+
+TEST(ConcurrentQueueTest, TokenAndTokenFreeOperationsCanBeMixed)
+{
+    RecordingResource resource;
+    ScopedQueueResource useResource(resource);
+    {
+        ec2s::ConcurrentQueue<int> queue;
+        auto producer = queue.makeProducerToken();
+        auto consumer = queue.makeConsumerToken();
+        ASSERT_TRUE(producer.valid());
+
+        constexpr int perProducer = 1000;
+        for (int i = 0; i < perProducer; ++i)
+        {
+            ASSERT_TRUE(queue.enqueue(producer, i));
+            ASSERT_TRUE(queue.enqueue(perProducer + i));
+        }
+
+        // Each producer preserves FIFO, but there is no order across producers.
+        int nextExplicit = 0;
+        int nextImplicit = perProducer;
+        for (int i = 0; i < 2 * perProducer; ++i)
+        {
+            int result = -1;
+            ASSERT_TRUE(i % 2 == 0 ? queue.try_dequeue(consumer, result) : queue.try_dequeue(result));
+            ASSERT_GE(result, 0);
+            ASSERT_LT(result, 2 * perProducer);
+            if (result < perProducer)
+            {
+                EXPECT_EQ(result, nextExplicit++);
+            }
+            else
+            {
+                EXPECT_EQ(result, nextImplicit++);
+            }
+        }
+        EXPECT_EQ(nextExplicit, perProducer);
+        EXPECT_EQ(nextImplicit, 2 * perProducer);
+        int result = -1;
+        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+        EXPECT_FALSE(queue.try_dequeue(result));
+        EXPECT_EQ(result, -1);
+    }
+    EXPECT_GT(resource.allocations, 0u);
+    EXPECT_EQ(resource.allocations, resource.deallocations);
+}
+
+TEST(ConcurrentQueueTest, TokensSupportMoveOnlyValues)
+{
+    ec2s::ConcurrentQueue<std::unique_ptr<int>> queue;
+    auto producer = queue.makeProducerToken();
+    auto consumer = queue.makeConsumerToken();
+    ASSERT_TRUE(producer.valid());
+
+    auto value = std::make_unique<int>(42);
+    ASSERT_TRUE(queue.enqueue(producer, std::move(value)));
+    EXPECT_EQ(value, nullptr);
+
+    std::unique_ptr<int> result;
+    ASSERT_TRUE(queue.try_dequeue(consumer, result));
+    ASSERT_NE(result, nullptr);
+    EXPECT_EQ(*result, 42);
+    EXPECT_FALSE(queue.try_dequeue(consumer, result));
+}
+
+TEST(ConcurrentQueueTest, ProducerTokenAllocationFailurePreservesValues)
+{
+    RecordingResource resource;
+    ScopedQueueResource useResource(resource);
+    {
+        ec2s::ConcurrentQueue<std::string> queue;
+        resource.failAllocations = true;
+        auto producer            = queue.makeProducerToken();
+        auto consumer            = queue.makeConsumerToken();
+        EXPECT_FALSE(producer.valid());
+
+        const std::string copied(256, 'c');
+        std::string moved(256, 'm');
+        EXPECT_FALSE(queue.enqueue(producer, copied));
+        EXPECT_FALSE(queue.enqueue(producer, std::move(moved)));
+        EXPECT_EQ(copied, std::string(256, 'c'));
+        EXPECT_EQ(moved, std::string(256, 'm'));
+        std::string result = "unchanged";
+        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+        EXPECT_EQ(result, "unchanged");
+
+        resource.failAllocations = false;
+        auto recovered           = queue.makeProducerToken();
+        ASSERT_TRUE(recovered.valid());
+        ASSERT_TRUE(queue.enqueue(recovered, copied));
+        ASSERT_TRUE(queue.enqueue(recovered, std::move(moved)));
+        ASSERT_TRUE(queue.try_dequeue(consumer, result));
+        EXPECT_EQ(result, copied);
+        ASSERT_TRUE(queue.try_dequeue(consumer, result));
+        EXPECT_EQ(result, std::string(256, 'm'));
+        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+    }
+    EXPECT_EQ(resource.allocations, resource.deallocations);
+}
+
+TEST(ConcurrentQueueTest, MultipleProducersAndConsumersWithTokens)
+{
+    constexpr int producerCount = 4;
+    constexpr int consumerCount = 4;
+    constexpr int perProducer   = 10000;
+    constexpr int total         = producerCount * perProducer;
+    RecordingResource resource;
+    ScopedQueueResource useResource(resource);
+    {
+        ec2s::ConcurrentQueue<int> queue(1024);
+        std::vector<std::atomic<int>> seen(total);
+        std::atomic<int> consumed{ 0 };
+        std::atomic<int> enqueueFailures{ 0 };
+        std::atomic<int> invalidValues{ 0 };
+        std::barrier start(producerCount + consumerCount);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        std::vector<std::thread> threads;
+
+        for (int producer = 0; producer < producerCount; ++producer)
+        {
+            threads.emplace_back(
+                [&, producer]
+                {
+                    auto token = queue.makeProducerToken();
+                    EXPECT_TRUE(token.valid());
+                    start.arrive_and_wait();
+                    for (int i = 0; i < perProducer; ++i)
+                    {
+                        if (!queue.enqueue(token, producer * perProducer + i))
+                        {
+                            ++enqueueFailures;
+                        }
+                    }
+                });
+        }
+        for (int consumer = 0; consumer < consumerCount; ++consumer)
+        {
+            threads.emplace_back(
+                [&]
+                {
+                    auto token = queue.makeConsumerToken();
+                    start.arrive_and_wait();
+                    while (consumed.load() < total && std::chrono::steady_clock::now() < deadline)
+                    {
+                        int result;
+                        if (queue.try_dequeue(token, result))
+                        {
+                            if (result >= 0 && result < total)
+                            {
+                                ++seen[result];
+                            }
+                            else
+                            {
+                                ++invalidValues;
+                            }
+                            ++consumed;
+                        }
+                        else
+                        {
+                            std::this_thread::yield();
+                        }
+                    }
+                });
+        }
+        for (auto& thread : threads)
+        {
+            thread.join();
+        }
+
+        EXPECT_EQ(enqueueFailures.load(), 0);
+        EXPECT_EQ(invalidValues.load(), 0);
+        EXPECT_EQ(consumed.load(), total);
+        for (const auto& count : seen)
+        {
+            EXPECT_EQ(count.load(), 1);
+        }
+        auto consumer = queue.makeConsumerToken();
+        int result;
+        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+    }
+    EXPECT_EQ(resource.allocations, resource.deallocations);
+}
