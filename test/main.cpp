@@ -1,4 +1,5 @@
 #include <EC2S.hpp>
+#include <TaggedPointer.hpp>
 
 #include <iostream>
 #include <chrono>
@@ -537,89 +538,6 @@ void taggedPointerPerformanceTest()
     std::cout << "tagged pointer performance test completed\n";
 }
 
-void lockFreeQueueTest()
-{
-    std::cout << "lock-free queue test-----------------------\n";
-
-    LockFreeQueue<int> queue;
-    constexpr int kTestUnit    = 1000;
-    constexpr int kProducerNum = 10;
-    constexpr int kConsumerNum = 10;
-    std::vector<int> consumedValues;
-    std::mutex consumedValuesMutex;
-
-    // Producer threads
-    std::vector<std::thread> producers;
-    producers.resize(kProducerNum);
-    for (int i = 0; i < kProducerNum; ++i)
-    {
-        producers[i] = std::thread(
-            [&queue, i]()
-            {
-                for (int j = i * kTestUnit; j < (i + 1) * kTestUnit; ++j)
-                {
-                    queue.push(j);
-                }
-            });
-    }
-
-    // Consumer threads
-    std::vector<std::thread> consumers;
-    consumers.resize(kProducerNum);
-    for (int i = 0; i < kConsumerNum; ++i)
-    {
-        consumers[i] = std::thread(
-            [&queue, &consumedValues, &consumedValuesMutex]()
-            {
-                for (int j = 0; j < kTestUnit; ++j)
-                {
-                    int value;
-                    while (!queue.pop(value))
-                    {
-                        // Queue is empty, wait and retry
-                        std::this_thread::yield();
-                    }
-
-                    {
-                        std::lock_guard<std::mutex> lock(consumedValuesMutex);
-                        consumedValues.push_back(value);
-                    }
-                }
-            });
-    }
-
-    // Wait for all producers and consumers to finish
-    for (auto& producer : producers)
-    {
-        producer.join();
-    }
-    for (auto& consumer : consumers)
-    {
-        consumer.join();
-    }
-
-    // validation
-    std::sort(consumedValues.begin(), consumedValues.end());
-    for (int i = 0; i < kProducerNum * kTestUnit; ++i)
-    {
-        std::cout << consumedValues[i] << " ";
-    }
-    std::cout << "\n";
-
-    bool succeeded = true;
-    for (int i = 0; i < kProducerNum * kTestUnit; ++i)
-    {
-        if (consumedValues[i] != i)
-        {
-            succeeded = false;
-            std::cout << "failed at index " << i << ": expected " << i << ", got " << consumedValues[i] << "\n";
-            return;
-        }
-    }
-
-    std::cout << "lock-free queue test completed\n";
-}
-
 int main()
 {
     //test();
@@ -631,7 +549,6 @@ int main()
     externalAllocatorTest();
     //taggedPointerTest();
     //taggedPointerPerformanceTest();
-    //lockFreeQueueTest();
 
     return 0;
 }

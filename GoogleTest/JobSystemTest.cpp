@@ -16,6 +16,8 @@
 #include <future>
 #include <memory>
 #include <semaphore>
+#include <barrier>
+#include <latch>
 
 #include <JobSystem.hpp>
 
@@ -407,4 +409,260 @@ TEST(ThreadPoolCompletion, RepeatedGraphsWhileAnotherJobIsRunning)
     EXPECT_EQ(status, std::future_status::ready);
     pool.stop();
     waiter.join();
+}
+
+TEST(ThreadPoolConcurrency, ConcurrentSubmissionsExecuteExactlyOnce)
+{
+    ThreadPool pool(4);
+    constexpr int producerCount = 4;
+    constexpr int perProducer   = 5000;
+    std::vector<std::atomic<int>> executions(producerCount * perProducer);
+    std::barrier start(producerCount);
+    std::vector<std::thread> producers;
+    for (int producer = 0; producer < producerCount; ++producer)
+    {
+        producers.emplace_back(
+            [&, producer]
+            {
+                start.arrive_and_wait();
+                for (int i = 0; i < perProducer; ++i)
+                {
+                    const int index = producer * perProducer + i;
+                    pool.submit([&, index] { ++executions[index]; });
+                }
+            });
+    }
+    for (auto& producer : producers)
+    {
+        producer.join();
+    }
+    pool.wait();
+    for (const auto& count : executions)
+    {
+        EXPECT_EQ(count.load(), 1);
+    }
+}
+
+TEST(ThreadPoolDependency, ConcurrentRootsShareDescendants)
+{
+    ThreadPool pool(4);
+    constexpr int parentCount = 4;
+    constexpr int chainLength = 256;
+    std::vector<int> values(parentCount, 0);
+    std::vector<int> executions(chainLength, 0);
+    std::vector<Job*> parents;
+    std::vector<Job*> chain;
+    int result = 0;
+
+    for (int i = 0; i < parentCount; ++i)
+    {
+        parents.push_back(&pool.createJob([&, i] { values[i] = i + 1; }));
+    }
+    for (int i = 0; i < chainLength; ++i)
+    {
+        chain.push_back(&pool.createJob(
+            [&, i]
+            {
+                ++executions[i];
+                if (i == 0)
+                {
+                    result = std::accumulate(values.begin(), values.end(), 0);
+                }
+            }));
+    }
+    for (auto* parent : parents)
+    {
+        parent->addChild(std::move(*chain.front()));
+    }
+    for (int i = 1; i < chainLength; ++i)
+    {
+        chain[i - 1]->addChild(std::move(*chain[i]));
+    }
+
+    std::barrier start(parentCount);
+    std::vector<std::thread> producers;
+    for (auto* parent : parents)
+    {
+        producers.emplace_back(
+            [&, parent]
+            {
+                start.arrive_and_wait();
+                pool.submit(std::move(*parent));
+            });
+    }
+    for (auto& producer : producers)
+    {
+        producer.join();
+    }
+    pool.wait();
+    EXPECT_EQ(result, 10);
+    for (const auto count : executions)
+    {
+        EXPECT_EQ(count, 1);
+    }
+}
+
+TEST(ThreadPoolCompletion, MultipleWaitersObserveResults)
+{
+    ThreadPool pool(2);
+    std::binary_semaphore started{ 0 };
+    std::binary_semaphore releaseJob{ 0 };
+    int result = 0;
+    pool.submit(
+        [&]
+        {
+            started.release();
+            releaseJob.acquire();
+            result = 42;
+        });
+    started.acquire();
+
+    std::latch waiting(4);
+    std::vector<std::thread> waiters;
+    for (int i = 0; i < 4; ++i)
+    {
+        waiters.emplace_back(
+            [&]
+            {
+                waiting.count_down();
+                pool.wait();
+                EXPECT_EQ(result, 42);
+            });
+    }
+    waiting.wait();
+    releaseJob.release();
+    for (auto& waiter : waiters)
+    {
+        waiter.join();
+    }
+}
+
+TEST(ThreadPoolLifecycle, RepeatedStopAndRestartDrainsJobs)
+{
+    ThreadPool pool(4);
+    std::atomic<int> executed{ 0 };
+    for (int cycle = 0; cycle < 16; ++cycle)
+    {
+        pool.restart();
+        for (int i = 0; i < 100; ++i)
+        {
+            pool.submit([&] { ++executed; });
+        }
+        pool.stop();
+        EXPECT_EQ(executed.load(), (cycle + 1) * 100);
+        pool.stop();
+        pool.restart();
+    }
+}
+
+namespace
+{
+    class JobQueueResourceScope
+    {
+    public:
+        explicit JobQueueResourceScope(std::pmr::memory_resource& resource)
+        {
+            setConcurrentQueueMemoryResource(resource);
+        }
+
+        ~JobQueueResourceScope()
+        {
+            setConcurrentQueueMemoryResource(*std::pmr::new_delete_resource());
+        }
+    };
+
+    class FailingJobQueueResource : public std::pmr::memory_resource
+    {
+    public:
+        std::atomic<bool> fail{ false };
+        std::atomic<int> failures{ 0 };
+
+    private:
+        void* do_allocate(std::size_t bytes, std::size_t alignment) override
+        {
+            if (fail.load())
+            {
+                ++failures;
+                throw std::bad_alloc();
+            }
+            return std::pmr::new_delete_resource()->allocate(bytes, alignment);
+        }
+
+        void do_deallocate(void* pointer, std::size_t bytes, std::size_t alignment) override
+        {
+            std::pmr::new_delete_resource()->deallocate(pointer, bytes, alignment);
+        }
+
+        bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override
+        {
+            return this == &other;
+        }
+    };
+}  // namespace
+
+TEST(ThreadPoolAllocationFailure, RootRunsOnSubmittingThread)
+{
+    JobQueueResourceScope resource(*std::pmr::null_memory_resource());
+    ThreadPool pool(2);
+    std::thread::id executedOn;
+    pool.submit([&] { executedOn = std::this_thread::get_id(); });
+    EXPECT_EQ(executedOn, std::this_thread::get_id());
+    pool.wait();
+    pool.stop();
+}
+
+TEST(ThreadPoolAllocationFailure, ChildRunsOnParentWorker)
+{
+    FailingJobQueueResource resource;
+    JobQueueResourceScope useResource(resource);
+    ThreadPool pool(2);
+    std::binary_semaphore parentStarted{ 0 };
+    std::binary_semaphore releaseParent{ 0 };
+    std::thread::id parentThread;
+    std::thread::id childThread;
+    auto& parent = pool.createJob(
+        [&]
+        {
+            parentThread = std::this_thread::get_id();
+            parentStarted.release();
+            releaseParent.acquire();
+        });
+    auto& child = pool.createJob([&] { childThread = std::this_thread::get_id(); });
+    parent.addChild(std::move(child));
+    pool.submit(std::move(parent));
+    parentStarted.acquire();
+    resource.fail = true;
+    releaseParent.release();
+    pool.wait();
+
+    EXPECT_GT(resource.failures.load(), 0);
+    EXPECT_NE(parentThread, std::this_thread::get_id());
+    EXPECT_EQ(childThread, parentThread);
+}
+
+TEST(ThreadPoolAllocationFailure, SharedDescendantsCompleteExactlyOnce)
+{
+    JobQueueResourceScope resource(*std::pmr::null_memory_resource());
+    ThreadPool pool(2);
+    int executions  = 0;
+    int firstValue  = 0;
+    int secondValue = 0;
+    int result      = 0;
+    auto& first     = pool.createJob([&] { firstValue = 20; });
+    auto& second    = pool.createJob([&] { secondValue = 22; });
+    auto& child     = pool.createJob(
+        [&]
+        {
+            ++executions;
+            result = firstValue + secondValue;
+        });
+    first.addChild(std::move(child));
+    second.addChild(std::move(child));
+    pool.submit(std::move(first));
+    pool.submit(std::move(second));
+    pool.wait();
+
+    EXPECT_EQ(result, 42);
+    EXPECT_EQ(executions, 1);
+    pool.stop();
 }
