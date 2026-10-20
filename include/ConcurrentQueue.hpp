@@ -1,7 +1,7 @@
 #ifndef EC2S_CONCURRENTQUEUE_HPP_
 #define EC2S_CONCURRENTQUEUE_HPP_
 
-#include <concurrentqueue.h>
+#include "third_party/concurrentqueue/concurrentqueue.h"
 
 #include <cstddef>
 #include <limits>

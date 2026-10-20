@@ -11,14 +11,6 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "64-bit build required.")
 endif()
 
-include(FetchContent)
-FetchContent_Declare(
-    concurrentqueue
-    GIT_REPOSITORY https://github.com/cameron314/concurrentqueue.git
-    GIT_TAG 9afb99746f0f5fc94ac8aef737053ae0481ba8d1 # v1.0.5
-)
-FetchContent_MakeAvailable(concurrentqueue)
-
 # Collect header files for IDE visibility
 file(GLOB_RECURSE PROJECT_HEADERS
     CONFIGURE_DEPENDS
@@ -31,10 +23,6 @@ add_library(${EC2S_LIB_NAME} INTERFACE)
 
 target_compile_features(${EC2S_LIB_NAME}
     INTERFACE cxx_std_20
-)
-
-target_link_libraries(${EC2S_LIB_NAME}
-    INTERFACE concurrentqueue
 )
 
 target_include_directories(${EC2S_LIB_NAME}
