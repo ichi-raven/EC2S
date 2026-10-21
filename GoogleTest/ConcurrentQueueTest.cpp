@@ -101,7 +101,7 @@ TEST(ConcurrentQueueTest, EmptyAndSingleProducerFIFO)
 {
     ec2s::ConcurrentQueue<int> queue;
     int result = 0;
-    EXPECT_FALSE(queue.try_dequeue(result));
+    EXPECT_FALSE(queue.tryDequeue(result));
 
     for (int i = 0; i < 1000; ++i)
     {
@@ -109,10 +109,10 @@ TEST(ConcurrentQueueTest, EmptyAndSingleProducerFIFO)
     }
     for (int i = 0; i < 1000; ++i)
     {
-        ASSERT_TRUE(queue.try_dequeue(result));
+        ASSERT_TRUE(queue.tryDequeue(result));
         EXPECT_EQ(result, i);
     }
-    EXPECT_FALSE(queue.try_dequeue(result));
+    EXPECT_FALSE(queue.tryDequeue(result));
 }
 
 TEST(ConcurrentQueueTest, MoveOnlyValues)
@@ -123,7 +123,7 @@ TEST(ConcurrentQueueTest, MoveOnlyValues)
     EXPECT_EQ(value, nullptr);
 
     std::unique_ptr<int> result;
-    ASSERT_TRUE(queue.try_dequeue(result));
+    ASSERT_TRUE(queue.tryDequeue(result));
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(*result, 42);
 }
@@ -155,7 +155,7 @@ TEST(ConcurrentQueueTest, OverAlignedValues)
         const AlignedValue value(42);
         ASSERT_TRUE(queue.enqueue(value));
         AlignedValue result;
-        ASSERT_TRUE(queue.try_dequeue(result));
+        ASSERT_TRUE(queue.tryDequeue(result));
         EXPECT_EQ(result.value, 42);
     }
     EXPECT_GT(resource.allocations, 0u);
@@ -168,7 +168,7 @@ TEST(ConcurrentQueueTest, AllocationFailureReturnsFalse)
     ec2s::ConcurrentQueue<int> queue(32);
     EXPECT_FALSE(queue.enqueue(42));
     int result = 0;
-    EXPECT_FALSE(queue.try_dequeue(result));
+    EXPECT_FALSE(queue.tryDequeue(result));
 }
 
 TEST(ConcurrentQueueTest, AllocationFailurePreservesQueuedValues)
@@ -186,13 +186,13 @@ TEST(ConcurrentQueueTest, AllocationFailurePreservesQueuedValues)
         for (int i = 0; i < 32; ++i)
         {
             int result = -1;
-            ASSERT_TRUE(queue.try_dequeue(result));
+            ASSERT_TRUE(queue.tryDequeue(result));
             EXPECT_EQ(result, i);
         }
         resource.failAllocations = false;
         ASSERT_TRUE(queue.enqueue(42));
         int result = 0;
-        ASSERT_TRUE(queue.try_dequeue(result));
+        ASSERT_TRUE(queue.tryDequeue(result));
         EXPECT_EQ(result, 42);
     }
     EXPECT_EQ(resource.allocations, resource.deallocations);
@@ -240,7 +240,7 @@ TEST(ConcurrentQueueTest, MultipleProducersAndConsumers)
                     while (consumed.load() < total && std::chrono::steady_clock::now() < deadline)
                     {
                         int result;
-                        if (queue.try_dequeue(result))
+                        if (queue.tryDequeue(result))
                         {
                             if (result >= 0 && result < total)
                             {
@@ -272,7 +272,7 @@ TEST(ConcurrentQueueTest, MultipleProducersAndConsumers)
             EXPECT_EQ(count.load(), 1);
         }
         int result;
-        EXPECT_FALSE(queue.try_dequeue(result));
+        EXPECT_FALSE(queue.tryDequeue(result));
     }
     EXPECT_EQ(resource.allocations, resource.deallocations);
 }
@@ -300,7 +300,7 @@ TEST(ConcurrentQueueTest, TokenAndTokenFreeOperationsCanBeMixed)
         for (int i = 0; i < 2 * perProducer; ++i)
         {
             int result = -1;
-            ASSERT_TRUE(i % 2 == 0 ? queue.try_dequeue(consumer, result) : queue.try_dequeue(result));
+            ASSERT_TRUE(i % 2 == 0 ? queue.tryDequeue(consumer, result) : queue.tryDequeue(result));
             ASSERT_GE(result, 0);
             ASSERT_LT(result, 2 * perProducer);
             if (result < perProducer)
@@ -315,8 +315,8 @@ TEST(ConcurrentQueueTest, TokenAndTokenFreeOperationsCanBeMixed)
         EXPECT_EQ(nextExplicit, perProducer);
         EXPECT_EQ(nextImplicit, 2 * perProducer);
         int result = -1;
-        EXPECT_FALSE(queue.try_dequeue(consumer, result));
-        EXPECT_FALSE(queue.try_dequeue(result));
+        EXPECT_FALSE(queue.tryDequeue(consumer, result));
+        EXPECT_FALSE(queue.tryDequeue(result));
         EXPECT_EQ(result, -1);
     }
     EXPECT_GT(resource.allocations, 0u);
@@ -335,10 +335,10 @@ TEST(ConcurrentQueueTest, TokensSupportMoveOnlyValues)
     EXPECT_EQ(value, nullptr);
 
     std::unique_ptr<int> result;
-    ASSERT_TRUE(queue.try_dequeue(consumer, result));
+    ASSERT_TRUE(queue.tryDequeue(consumer, result));
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(*result, 42);
-    EXPECT_FALSE(queue.try_dequeue(consumer, result));
+    EXPECT_FALSE(queue.tryDequeue(consumer, result));
 }
 
 TEST(ConcurrentQueueTest, ProducerTokenAllocationFailurePreservesValues)
@@ -359,7 +359,7 @@ TEST(ConcurrentQueueTest, ProducerTokenAllocationFailurePreservesValues)
         EXPECT_EQ(copied, std::string(256, 'c'));
         EXPECT_EQ(moved, std::string(256, 'm'));
         std::string result = "unchanged";
-        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+        EXPECT_FALSE(queue.tryDequeue(consumer, result));
         EXPECT_EQ(result, "unchanged");
 
         resource.failAllocations = false;
@@ -367,11 +367,11 @@ TEST(ConcurrentQueueTest, ProducerTokenAllocationFailurePreservesValues)
         ASSERT_TRUE(recovered.valid());
         ASSERT_TRUE(queue.enqueue(recovered, copied));
         ASSERT_TRUE(queue.enqueue(recovered, std::move(moved)));
-        ASSERT_TRUE(queue.try_dequeue(consumer, result));
+        ASSERT_TRUE(queue.tryDequeue(consumer, result));
         EXPECT_EQ(result, copied);
-        ASSERT_TRUE(queue.try_dequeue(consumer, result));
+        ASSERT_TRUE(queue.tryDequeue(consumer, result));
         EXPECT_EQ(result, std::string(256, 'm'));
-        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+        EXPECT_FALSE(queue.tryDequeue(consumer, result));
     }
     EXPECT_EQ(resource.allocations, resource.deallocations);
 }
@@ -421,7 +421,7 @@ TEST(ConcurrentQueueTest, MultipleProducersAndConsumersWithTokens)
                     while (consumed.load() < total && std::chrono::steady_clock::now() < deadline)
                     {
                         int result;
-                        if (queue.try_dequeue(token, result))
+                        if (queue.tryDequeue(token, result))
                         {
                             if (result >= 0 && result < total)
                             {
@@ -454,7 +454,7 @@ TEST(ConcurrentQueueTest, MultipleProducersAndConsumersWithTokens)
         }
         auto consumer = queue.makeConsumerToken();
         int result;
-        EXPECT_FALSE(queue.try_dequeue(consumer, result));
+        EXPECT_FALSE(queue.tryDequeue(consumer, result));
     }
     EXPECT_EQ(resource.allocations, resource.deallocations);
 }

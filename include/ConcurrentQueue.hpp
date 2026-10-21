@@ -115,14 +115,19 @@ namespace ec2s
             return token.valid() && mQueue.enqueue(token, std::move(value));
         }
 
-        [[nodiscard]] bool try_dequeue(T& result)
+        [[nodiscard]] bool tryDequeue(T& result)
         {
             return mQueue.try_dequeue(result);
         }
 
-        [[nodiscard]] bool try_dequeue(ConsumerToken& token, T& result)
+        [[nodiscard]] bool tryDequeue(ConsumerToken& token, T& result)
         {
             return mQueue.try_dequeue(token, result);
+        }
+
+        [[nodiscard]] size_t sizeApprox() const
+        {
+            return mQueue.size_approx();
         }
 
     private:

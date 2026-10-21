@@ -204,7 +204,7 @@ namespace ec2s
             {
                 mAvailableJobs.acquire();
                 Job* pJob;
-                while (!mReadyJobs.try_dequeue(consumerToken, pJob))
+                while (!mReadyJobs.tryDequeue(consumerToken, pJob))
                 {
                     if (mStop.load(std::memory_order_acquire) && mRemainingJobNum.load(std::memory_order_acquire) == 0)
                     {
